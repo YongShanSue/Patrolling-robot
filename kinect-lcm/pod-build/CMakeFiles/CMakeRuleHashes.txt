@@ -1,0 +1,9 @@
+# Hashes of file build rules.
+e3652d634953d99401941e99a3e5a876 ../lcmtypes/java/kinect/segmentlist_t.class
+ee2041b02dc8e5ece578c4f661b636be CMakeFiles/fsaPUuseCW9IQxAoRQ4u2S3RIEGNOGjC
+35c3136596ff75c1c62736f9d94a69d0 CMakeFiles/lcmgen_c
+e553a781974e6db8d2ab4d1dc304291c CMakeFiles/lcmgen_cpp
+e59a09aff8aff6fd509deebb2e647a33 CMakeFiles/lcmgen_java
+e67d18771220e582406102597bf2bea5 CMakeFiles/lcmgen_python
+ee2041b02dc8e5ece578c4f661b636be CMakeFiles/lcmtypes_kinect_jar
+fbf4f27caff19c06329b3647c26921d2 lcmtypes_kinect.jar

@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/src/kinect-utils/kinect-calib.c
+stdio.h
+-
+string.h
+-
+stdlib.h
+-
+kinect-calib.h
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/src/kinect-utils/kinect-calib.h
+
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/src/kinect-utils/kinect-calib.h
+

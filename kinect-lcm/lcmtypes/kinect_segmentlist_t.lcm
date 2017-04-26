@@ -1,0 +1,10 @@
+package kinect;
+
+struct segmentlist_t
+{
+    int64_t  timestamp;
+    kinect.projected_point2d_t	left_normalized_line[2];
+    kinect.projected_point2d_t	right_normalized_line[2];
+    kinect.projected_point2d_t	left_normal;
+    kinect.projected_point2d_t	right_normal;
+}

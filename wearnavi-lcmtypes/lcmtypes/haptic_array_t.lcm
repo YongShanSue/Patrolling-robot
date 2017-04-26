@@ -1,0 +1,74 @@
+package obstacle;
+
+struct haptic_array_t
+{
+    int64_t utime;
+
+	////////////////////////////////////////////////////////////////
+	// Each msg should be in 1-6
+	// 0: unknown state
+	// 1: no input: lens covered, under sunlight, or viewing angle is bad
+	// 2: cannot see ground: close to walls or obstacles -> use ir
+	// 3: ground height is weird; maybe in front of table -> use ir
+	// 4: uneven ground height: maybe stair or chair -> use ir
+	// 5: freespace with nearby obstales (detected by ir ranges) -> use occu & ir
+	// 6: freespace no nearby obstacles	-> use occu
+	int32_t state_id;
+	int16_t has_input;
+	int16_t see_ground;
+	double ground_height;
+	double ground_height_std;
+	double trans_xyzrpy[6];
+
+    int32_t num_ranges;					// default is 5
+
+	int16_t ranges_state[num_ranges]; 	// 1: < 0.3, 2: < 0.8 use ir, 3: dense ground 
+	double ranges_m[num_ranges];		// final ranges outputs, in meter
+	
+	double ranges_ir_valid[num_ranges];	// ir range > 0.3 ratio, should > 0.15
+	double ranges_m_ir[num_ranges];		// from ir minimum, in meter
+
+	//int16_t ranges_start_ground[num_ranges];
+	double ranges_m_dense[num_ranges];	// from occu grid, dense ground, first 1->0
+	double ranges_m_hit[num_ranges];	// from occu grid, hit obscacle, in meter
+	
+	int16_t num_traj;
+	int16_t ranges_trajlib_hit[num_ranges]; 	// the step a traj hit an obstacle 
+
+	// detected objects ids
+	// -1: no object/obstacle
+	//  0: freespace
+    //  1: wall
+	//  2: chair
+	//  3: table
+	//  4: person
+	// 99: unknown obstacle
+	int16_t obj_ids[num_ranges]; 	
+
+	string tts_data;
+
+    // bounding rect for further processing, e.g., Caffe
+    int16_t bbox_rgb_xs[num_ranges];
+    int16_t bbox_rgb_ys[num_ranges];
+    int16_t bbox_rgb_ws[num_ranges];
+    int16_t bbox_rgb_hs[num_ranges]; 
+
+    int16_t bbox_d_xs[num_ranges];
+    int16_t bbox_d_ys[num_ranges];
+    int16_t bbox_d_ws[num_ranges];
+    int16_t bbox_d_hs[num_ranges]; 
+
+	////////////////////////////////////////////////////////////////
+	// represent range by vibration pattern  intensity x frequency
+    int16_t ranges[num_ranges];
+    // range to vibration settings
+    double h_min_r;
+    double h_max_r;
+    int16_t h_pattern_setting;
+
+    // full controls of each motor
+	int16_t intensities[num_ranges];
+	int16_t frequencies[num_ranges];
+	int16_t states[num_ranges];
+    
+}

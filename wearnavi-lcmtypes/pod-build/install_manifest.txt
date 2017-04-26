@@ -1,0 +1,14 @@
+/home/robotvision/code/build/lib/liblcmtypes_wearnavi.a
+/home/robotvision/code/build/include/lcmtypes/obstacle_tts_t.h
+/home/robotvision/code/build/include/lcmtypes/obstacle_haptic_array_t.h
+/home/robotvision/code/build/include/lcmtypes/wearnavi.h
+/home/robotvision/code/build/lib/pkgconfig/lcmtypes_wearnavi.pc
+/home/robotvision/code/build/include/lcmtypes/obstacle/tts_t.hpp
+/home/robotvision/code/build/include/lcmtypes/obstacle/haptic_array_t.hpp
+/home/robotvision/code/build/include/lcmtypes/wearnavi.hpp
+/home/robotvision/code/build/share/java/lcmtypes_wearnavi.jar
+/home/robotvision/code/build/lib/python2.7/dist-packages/obstacle/haptic_array_t.py
+/home/robotvision/code/build/lib/python2.7/dist-packages/obstacle/tts_t.py
+/home/robotvision/code/build/lib/python2.7/dist-packages/obstacle/__init__.py
+/home/robotvision/code/build/share/lcmtypes/tts_t.lcm
+/home/robotvision/code/build/share/lcmtypes/haptic_array_t.lcm

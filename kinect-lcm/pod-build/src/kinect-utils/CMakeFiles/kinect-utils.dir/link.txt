@@ -1,0 +1,1 @@
+/usr/bin/cc  -fPIC -O3 -DNDEBUG   -shared -Wl,-soname,libkinect-utils.so.1 -o ../../lib/libkinect-utils.so.1 CMakeFiles/kinect-utils.dir/kinect-calib.c.o  -L/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/lib  -L/home/robotvision/code/build/lib -Wl,-rpath,:::::::::::::::::::::::::::::::: 

@@ -1,0 +1,1990 @@
+#include "rv-kinect-frame-pcl-lcm-simple.h"
+
+using namespace cv;
+using namespace std;
+
+bool finish_;
+
+blKinectFramePCL::blKinectFramePCL(lcm_t* lcm) {
+
+	this->lcm_ = lcm;
+
+	kcal = kinect_calib_new();
+	rv::get_default_kinect_calib(kcal);
+//	rv::get_default_ti_board_calib(kcal);
+	kinect_decimate =4.0;
+
+	cv_bridge = new cvBridgeLCM(lcm, lcm);
+	
+	string frame_channel_ = "KINECT_FRAME";
+	kinect_frame_msg_t_subscription_t* sub_kinect = kinect_frame_msg_t_subscribe(
+			lcm_, frame_channel_.c_str(), blKinectFramePCL::on_kinect_frame_aux, this);
+	cout << "Subscribe kinect_frame_msg_t channel:\t" << frame_channel_ << endl;
+
+	this->lcmgl_ = bot_lcmgl_init(lcm_, "LCMGL");
+	this->lcmgl_spotlight = bot_lcmgl_init(lcm_, "LCMGL_SPOTLIGHT");
+	this->lcmgl_haptic = bot_lcmgl_init(lcm_, "LCMGL_HAPTIC");
+	this->lcmgl_v = bot_lcmgl_init(lcm_, "LCMGL_VERTICAL");
+	this->lcmgl_h = bot_lcmgl_init(lcm_, "LCMGL_HORIZONTAL");
+	this->lcmgl_pointcloud = bot_lcmgl_init(lcm_, "LCMGL_DEMO");
+	this->is_init = 0;
+	this->timestamp_init = bot_timestamp_now();
+	this->default_pitch = 20.0;
+	this->default_height = 1.0;
+
+	this->publish_lcmgl = 1;
+
+	// ML settings
+	this->ml_k = 5;
+	this->ml_d = 36;
+	this->ml_w = Eigen::MatrixXf(ml_k, ml_d);
+	this->ml_b = Eigen::MatrixXf(ml_k, 1);
+	this->ml_lbls.push_back("wall");
+	this->ml_lbls.push_back("chair");
+	this->ml_lbls.push_back("table");
+	this->ml_lbls.push_back("stair up");
+
+	//TODO: just do something very quickly
+	// feature vector 36 dimension:
+	// [v_-0.3, v_-0.2, v_-0.1, v_0, ..., v_1.5,
+	//  h_-0.3, h_-0.2, h_-0.1, h_0, ..., h_1.5]
+	// Wall
+	ml_w.row(0) <<
+			0, 0, 0, 0, 0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+			-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1;
+	// Chair: only care about knee height horizontal points; can't see chair from back
+	ml_w.row(1) <<
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, -1, -1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1;
+	//				 G 		   30cm
+	// Table
+	ml_w.row(2) <<
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, -1, -1, -1, -1, -1, 1, 1, 1, 0, 0, 0, 0, 0, 0;
+	//				 G 			30cm          70cm		  110cm (bar)
+	// Stair up
+	ml_w.row(3) <<
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0, 0, 0, 0;
+	//				 G 			  30cm                70cm		  		  110cm (bar)
+	// Stair down
+	ml_w.row(4) <<
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+	//				 G
+
+	// bias (a threshold of activation)
+	ml_b(0, 0) = 0;
+	ml_b(1, 0) = 0;
+	ml_b(2, 0) = 0;
+	ml_b(3, 0) = 0;
+	ml_b(4, 0) = 0;
+
+	this->start_time = bot_timestamp_now();
+	this->adjust_ground_height_time = 5;
+	
+}
+
+void blKinectFramePCL::set_pitch(float pitch){
+	this->default_pitch = pitch;
+}
+
+void blKinectFramePCL::set_height(float height){
+	this->default_height = height;
+}
+
+void blKinectFramePCL::set_fov(int h_fov, int v_fov){
+	this->h_fov = h_fov;
+	this->v_fov = v_fov;
+}
+
+void blKinectFramePCL::set_decimate(int decimate){
+	this->kinect_decimate = decimate;
+}
+
+void blKinectFramePCL::set_haptic_settings(
+		float h_min_r, float h_max_r, char* h_jn, int vibration_pattern){
+	this->haptic_min_range = h_min_r;
+	this->haptic_max_range = h_max_r;
+	stringstream ss;
+	ss << h_jn;
+	string h_jn_str = ss.str();
+	if(h_jn_str.size() != this->motor_num){
+		cout << "haptic just notice setting should have the same digit number as motor number" << endl;
+		exit(0);
+	}
+	for(int i = 0; i < h_jn_str.size(); i++){
+		int jn = atoi( h_jn_str.substr(i, 1).c_str() );
+		if(jn > 7 || jn <0){
+			cout << "haptic just notice setting is should be 0-7" << endl;
+			exit(0);
+		}
+		this->haptic_just_notice_array.push_back(jn);
+	}
+	this->haptic_vibration_pattern = vibration_pattern;
+}
+
+void blKinectFramePCL::set_braille_display_mode(int mode){
+	this->braille_display_mode = mode;
+}
+
+void blKinectFramePCL::set_haptic_array_mode(int mode){
+	this->haptic_array_mode = mode;
+}
+
+void blKinectFramePCL::set_motor_num(int num){
+	this->motor_num = num;
+}
+
+void blKinectFramePCL::set_publish_lcmgl(int i){
+	this->publish_lcmgl = i;
+}
+
+void blKinectFramePCL::set_patch_density(float patch_density){
+	this->patch_density = patch_density;
+}
+
+void blKinectFramePCL::set_rotated(int is_rotated){
+	this->is_rotated = is_rotated;
+}
+
+void blKinectFramePCL::set_adjust_ground_height_time(int adjust_ground_height_time){
+	this->adjust_ground_height_time = adjust_ground_height_time;
+}
+
+void blKinectFramePCL::publish_haptic_array(std::vector<int> haptic_array){
+
+	if(haptic_array.size() == 0){
+		return;
+	}
+
+	obstacle_haptic_array_t array;
+	array.utime = bot_timestamp_now();
+	array.num_ranges = haptic_array.size() * 2;
+	int16_t ranges[array.num_ranges];
+	// range
+	for(int i = 0; i < haptic_array.size(); i++){
+		ranges[i] = (int16_t) haptic_array[i];
+	}
+	// state/mode
+	for(int i = haptic_array.size(); i < 2 * haptic_array.size(); i++){
+		ranges[i] = 0;
+	}
+	array.ranges = ranges;
+
+	obstacle_haptic_array_t_publish(this->lcm_, "HAPTIC_ARRAY", &array);
+
+//	bot_core_planar_lidar_t lidar_t;
+//	lidar_t.utime = bot_timestamp_now();
+//	lidar_t.nranges = haptic_array.size();
+//	float lidar_ranges[array.num_ranges];
+//	for(int i = 0; i < haptic_array.size(); i++){
+//		int j = haptic_array.size() - i -1;
+//		lidar_ranges[i] = (float) haptic_array[j] / 50;
+//	}
+//	lidar_t.ranges = lidar_ranges;
+//	lidar_t.rad0 = -30 * M_PI / 180;
+//	lidar_t.radstep = (60/(haptic_array.size()-1)) * M_PI / 180;
+//
+//	bot_core_planar_lidar_t_publish(this->lcm_, "HAPTIC_LIDAR", &lidar_t);
+}
+
+blKinectFramePCL::~blKinectFramePCL() {
+}
+
+void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
+
+    double t_tot = (double)cvGetTickCount();
+
+	/////////////////////////////////////////////////////////////
+	// State Variable
+	////////////////////////////////////////////////////////////
+   
+	// decripted
+	// 1: no input
+	// 2: cannot see ground
+	// 3: ??
+	// 4: uneven ground
+	int state_id = 0;
+    printf("on_frame\n");
+	// individual directions
+    int num_ranges = this->motor_num;
+    vector<int> 	ranges_state;
+    vector<float>	ranges_m;
+
+
+    vector<float> 	ranges_m_dense;
+    vector<float> 	ranges_m_hit;
+
+    vector<int> obj_ids;
+    vector<string> obj_chars;
+    string tts_data = "";
+
+    vector<int> bbox_rgb_xs;
+    vector<int> bbox_rgb_ys;
+    vector<int> bbox_rgb_ws;
+    vector<int> bbox_rgb_hs;
+
+    vector<int> bbox_d_xs;
+    vector<int> bbox_d_ys;
+    vector<int> bbox_d_ws;
+    vector<int> bbox_d_hs;
+
+	///////////////////////////////////////
+	// 1. Input Pre-processing
+	// Input: msg
+	// Outputs: cloud_raw, im_rgb, im_depth_vis
+	//////////////////////////////////////
+
+	int rgb_buf_size_ = 640 * 480;
+	cv::Mat im_rgb = cv::Mat(480, 640, CV_8UC3);
+	Mat im_depth_vis = cv::Mat::zeros(480, 640, CV_8UC3);
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_raw = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_raw_xyz (new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_raw_reg = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+	//pcl::PCLPointCloud2 blob;
+	uint8_t* rgb_buf_ = (uint8_t*) malloc(rgb_buf_size_* 3);
+
+	rv::unpack_kinect_frame(msg, rgb_buf_, this->kcal, this->kinect_decimate, cloud_raw);
+	pcl::copyPointCloud (*cloud_raw,*cloud_raw_reg);
+	//pcl::fromPCLPointCloud2 (blob, *cloud_raw_reg);
+	im_rgb.data = rgb_buf_;
+	
+	////////////////////////////////save to pcd file///////////////////////////
+	if(msg->depth.depth_data_format == KINECT_DEPTH_MSG_T_DEPTH_MM){
+		
+		//printf("cloud_raw_size=%d,cloud_raw_reg=%d\n",cloud_raw->points.size(),cloud_raw_reg->points.size());
+		/*
+		cloud_raw_reg->width    =cloud_raw->width  ;
+		cloud_raw_reg->height   =cloud_raw->height ;
+		cloud_raw_reg->is_dense = false;
+		cloud_raw_reg->points.resize (cloud_raw->width * cloud_raw->height);
+		*/
+		printf("Finished2");
+		//Bot-lcm-viewer
+		bot_lcmgl_translated(lcmgl_pointcloud, 0, 0, 0);
+    		bot_lcmgl_line_width(lcmgl_pointcloud, 2.0f);
+    		bot_lcmgl_point_size(lcmgl_pointcloud, 6.0f);
+    		bot_lcmgl_begin(lcmgl_pointcloud, GL_POINTS);
+		/*
+		for (int i=0;i<cloud_raw->height*cloud_raw->width;i++){
+    			// setup color and draw a point
+    			bot_lcmgl_color3f(lcmgl_pointcloud, cloud_raw_reg->points[i].b/255.0, cloud_raw_reg->points[i].r/255.0, cloud_raw_reg->points[i].g/255.0);
+    			bot_lcmgl_vertex3f(lcmgl_pointcloud, cloud_raw_reg->points[i].x, cloud_raw_reg->points[i].y, cloud_raw_reg->points[i].z);
+   			// end and refresh to viewer
+    			
+		}
+		*/
+			
+		
+		/////////////////////////////////////Cloud segmentation/////////////////////////////////////////////////////
+				 // Create a search tree, use KDTreee for non-organized data.
+		  pcl::search::Search<pcl::PointXYZRGB>::Ptr tree;
+		  
+		  if (cloud_raw_reg->isOrganized ())
+		  {
+		    tree.reset (new pcl::search::OrganizedNeighbor<pcl::PointXYZRGB> ());
+		  }
+		  else
+		  {
+		    tree.reset (new pcl::search::KdTree<pcl::PointXYZRGB> (false));
+		  }
+			
+		  // Set the input pointcloud for the search tree
+		  tree->setInputCloud (cloud_raw_reg);
+
+	
+		  // Compute normals using both small and large scales at each point
+		  pcl::NormalEstimationOMP<pcl::PointXYZRGB, pcl::PointNormal> ne1;
+		  ne1.setInputCloud (cloud_raw_reg);
+		  ne1.setSearchMethod (tree);
+
+		 
+		  // * NOTE: setting viewpoint is very important, so that we can ensure
+		  // * normals are all pointed in the same direction!
+		   
+		  ne1.setViewPoint (std::numeric_limits<float>::max (), std::numeric_limits<float>::max (), std::numeric_limits<float>::max ());
+
+		  // calculate normals with the small scale
+		  pcl::PointCloud <pcl::PointNormal>::Ptr normals_small_scale (new pcl::PointCloud<pcl::PointNormal>);
+
+		  ne1.setRadiusSearch (0.02);
+		  ne1.compute (*normals_small_scale);
+			
+			printf("small_size=%d\n",normals_small_scale->points.size());
+		  // calculate normals with the large scale
+		  pcl::PointCloud<pcl::PointNormal>::Ptr normals_large_scale (new pcl::PointCloud<pcl::PointNormal>);
+
+		  ne1.setRadiusSearch (0.1);
+		  ne1.compute (*normals_large_scale);
+			printf("big_size=%d\n",normals_large_scale->points.size());
+		  // Create output cloud for DoN results
+		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud (new pcl::PointCloud<pcl::PointNormal>);
+		  pcl::copyPointCloud<pcl::PointXYZRGB, pcl::PointNormal>(*cloud_raw_reg, *doncloud);
+
+		  cout << "Calculating DoN... " << endl;
+		  // Create DoN operator
+		  pcl::DifferenceOfNormalsEstimation<pcl::PointXYZRGB, pcl::PointNormal, pcl::PointNormal> don;
+		  don.setInputCloud (cloud_raw_reg);
+		  don.setNormalScaleLarge (normals_large_scale);
+		  don.setNormalScaleSmall (normals_small_scale);
+
+
+		  // Compute DoN
+		  don.computeFeature (*doncloud);
+		  
+
+
+
+		  // Build the condition for filtering
+		  pcl::ConditionOr<pcl::PointNormal>::Ptr range_cond (new pcl::ConditionOr<pcl::PointNormal> () );
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.1)));
+		  // Build the filter
+		  pcl::ConditionalRemoval<pcl::PointNormal> condrem (range_cond);
+		  condrem.setInputCloud (doncloud);
+
+		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered (new pcl::PointCloud<pcl::PointNormal>);
+
+		  // Apply filter
+		  condrem.filter (*doncloud_filtered);
+
+		  doncloud = doncloud_filtered;
+
+		  
+		  // Filter by magnitude
+
+		  pcl::search::KdTree<pcl::PointNormal>::Ptr segtree (new pcl::search::KdTree<pcl::PointNormal>);
+		printf("Donclud_size=%d\n",doncloud->points.size());
+		  segtree->setInputCloud (doncloud);
+		printf("Donclud_size=%d\n",doncloud->points.size());
+		  std::vector<pcl::PointIndices> cluster_indices;
+		  pcl::EuclideanClusterExtraction<pcl::PointNormal> ec;
+		  
+		  ec.setClusterTolerance (0.05);
+		  ec.setMinClusterSize (15);
+		  ec.setMaxClusterSize (100000);
+		  ec.setSearchMethod (segtree);
+		  ec.setInputCloud (doncloud);
+		  ec.extract (cluster_indices);
+		  
+		  int j = 0;
+		  float b=10.0;
+                  float r=70.0;
+		  float g=140.0;	
+		  for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it, j++)
+		  {
+		    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_cluster_don (new pcl::PointCloud<pcl::PointNormal>);
+		    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
+		    {
+		      cloud_cluster_don->points.push_back (doncloud->points[*pit]);
+		    }
+
+		    cloud_cluster_don->width = int (cloud_cluster_don->points.size ());
+		    cloud_cluster_don->height = 1;
+		    cloud_cluster_don->is_dense = true;
+		    for(int i=0;i<cloud_cluster_don->points.size ();i++){
+				//printf("x= %f y=%f z=%f\n ",cloud_cluster_don->points[i].x,cloud_cluster_don->points[i].y,cloud_cluster_don->points[i].z);
+				bot_lcmgl_color3f(lcmgl_pointcloud, b/255.0, r/255.0, g/255.0);
+    				bot_lcmgl_vertex3f(lcmgl_pointcloud, cloud_cluster_don->points[i].x, cloud_cluster_don->points[i].y, cloud_cluster_don->points[i].z);	    
+		    }
+		    b=b+10;r=r+40;g+=20;
+		  }		
+			bot_lcmgl_end(lcmgl_pointcloud);
+    		bot_lcmgl_switch_buffer(lcmgl_pointcloud);
+
+
+
+
+		
+
+
+		/////////////////////////////////////Cloud segmentation/////////////////////////////////////////////////////
+
+		  
+	}
+	///////////////////////////////////////////////////////////////////////////
+
+	/*
+	// use depth visualization as canvas
+	uint8_t* depth_img = (uint8_t*)malloc(rgb_buf_size_*3);
+	rv::unpack_kinect_frame_depth_vis(msg,
+			depth_img);
+	im_depth_vis.data = depth_img;
+
+	///////////////////////////////////////////////////
+	// 2. First rotation - from an user input pitch or IMU, 
+	// depending on how the sensor is mounted.
+	// Input: cloud_raw, this->default_pitch
+	// Output: cloud_raw
+	//////////////////////////////////////////////////
+
+	Eigen::Matrix4d trans_mx_init;
+	double pos_t[3];
+	pos_t[0] = 0;
+	pos_t[1] = 0;
+	pos_t[2] = 0;
+	double rpy_t[3];
+	rpy_t[0] = 0;
+	rpy_t[1] = this->default_pitch / 180.0 * M_PI;
+	rpy_t[2] = 0;
+	double quat_t[4];
+	bot_roll_pitch_yaw_to_quat(rpy_t, quat_t);
+	double m_t[16];
+	bot_quat_pos_to_matrix(
+			quat_t, pos_t, m_t);
+	trans_mx_init <<
+			m_t[0],  m_t[1],  m_t[2],  m_t[3],
+			m_t[4],  m_t[5],  m_t[6],  m_t[7],
+			m_t[8],  m_t[9],  m_t[10], m_t[11],
+			m_t[12], m_t[13], m_t[14], m_t[15];
+
+	//The rotated cloud should be near MW, so that horizontal/vertal index can be found
+	pcl::transformPointCloud(*cloud_raw.get(), *cloud_raw.get(), trans_mx_init);
+
+	
+
+	
+    /////////////////////////////////////////////////////////////
+	// 3. Compute Surface Normal and find vertical/horizontal index
+	// Input: cloud_raw
+	// Outputs: im_v, im_h, im_dist, im_z, im_n
+	/////////////////////////////////////////////////////////////
+	
+	int has_input = 0;
+	
+	// vertical
+	cv::Mat im_v = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_8UC1);
+	// horizontal could be either ground or objects (table, chair, stairs...)
+	cv::Mat im_h = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_8UC1);
+	// distance/height
+	cv::Mat im_dist = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_32FC1);
+	cv::Mat im_z = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_32FC1);
+	cv::Mat im_n = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_32FC3);
+
+	printf("kkkWidth_depth=%d ,kkkkkheight_depth=%d\n",cloud_raw->width,cloud_raw->height);////////////////////Kobe test
+	// normal estimation
+	float scale = 0.02f;
+
+	pcl::PointCloud<pcl::Normal>::Ptr normals;
+	normals = pcl::PointCloud<pcl::Normal>::Ptr(new pcl::PointCloud<pcl::Normal>);
+	pcl::IntegralImageNormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
+	ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
+	ne.setMaxDepthChangeFactor(scale);
+	ne.setNormalSmoothingSize(10.0f);
+	ne.setInputCloud(cloud_raw);
+	ne.compute(*normals);
+
+	int gd_pts = rv::get_surface_normals(cloud_raw, normals,
+			im_n, im_v, im_h, im_dist, im_z);
+
+	Check 1: do we have enough pts for surface? 
+	if(gd_pts < 1000){
+		cout << "Check 1 fails: " << gd_pts 
+			<< " pts; lens covered, under sunlight, or viewing angle is bad" << endl;
+	}else{
+		has_input = 1;
+	}
+
+    ///////////////////////////////////////////////////////////
+	// 4. Access the ranges (Laser Mode)
+	// Input: im_dist
+	// Outputs: ranges_m_ir, ranges_ir_valid
+	///////////////////////////////////////////////////////////
+
+    vector<float> 	ranges_ir_valid;
+    vector<float> 	ranges_m_ir;
+	
+	// See the min range in each direction
+	// simply divide depth map vertically by motor_num
+	int width_block = im_dist.cols / this->motor_num;
+	std::vector<cv::Rect> blocks;
+	for(int i = 0; i < this->motor_num; i++){
+		cv::Rect block = cv::Rect(i * width_block, 0,
+				width_block, im_dist.rows)
+				& cv::Rect(0, 0, im_dist.cols, im_dist.rows);
+		blocks.push_back(block);
+	}
+
+	rv::get_haptic_range_blocks(im_dist, blocks,
+			ranges_m_ir, ranges_ir_valid);
+
+	/////////////////////////////////////////////////////////
+	// 5. find ground and estimated normal vector and height
+	// Inputs:
+	// Outputs: cloud (based on ground_height and normal), P, im_ground
+	//
+	// Situations:
+	// a) cannot see ground at all, such as close to wall
+	// b) can see ground, but mix with horizontal surface: chair, table, ...
+	// c) clear, just ground
+	/////////////////////////////////////////////////////////
+
+    int see_ground = 0;
+    float ground_height = 0;
+    float ground_height_std = 0;
+	
+	Eigen::Vector3f est_nor;
+	float est_ground_height = 0;
+	vector<float> block_heights;
+	for(int i = 0; i < 5; i++){
+		block_heights.push_back(0.0);
+	}
+	Eigen::Matrix<double, 3, 4> P;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB> ());
+	
+	cv::Mat im_ground = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_8UC1);
+	cv::Mat im_stixel = cv::Mat::zeros(cloud_raw->height, cloud_raw->width, CV_8UC1);
+
+	int found_ground = rv::get_ground_surface(
+			im_v, im_h, im_z, im_dist, im_n,
+			im_stixel, est_nor);
+
+	im_ground = (im_stixel == 1);
+
+	// use the ground normal in internal state if ground is unseen
+	if(found_ground == 0){
+		cout << "Check 2 fails: cannot see ground; close to walls or obstacles" << endl;
+		
+		est_nor = this->curr_ground_nor;
+		est_ground_height = this->curr_ground_height;
+		P = this->curr_proj_mx;
+	}
+
+	// get transformation to vertical up
+	Eigen::Vector3f vec_up(0, 0, 1); // upward
+	Eigen::Matrix3f R;
+	R = Eigen::Quaternionf().setFromTwoVectors(est_nor, vec_up);
+	Eigen::Matrix4d trans_mx;
+	trans_mx <<
+			R(0, 0), R(0, 1), R(0, 2), 0,
+			R(1, 0), R(1, 1), R(1, 2), 0,
+			R(2, 0), R(2, 1), R(2, 2), 0,
+			0, 0, 0, 1;
+	// rotate cloud by est trans
+	pcl::transformPointCloud(*cloud_raw.get(), *cloud.get(), trans_mx);
+
+	if(found_ground > 0){
+		// estimate ground height
+		rv::get_ground_height(cloud, im_ground,
+			est_ground_height, ground_height_std, block_heights);
+
+		if(ground_height_std < 0.1){ // typically < 0.05
+
+			rv::get_relative_transform(
+					cloud, im_ground, this->kinect_decimate,
+					this->kcal->intrinsics_rgb.fx,
+					this->kcal->intrinsics_rgb.fx,
+					this->kcal->intrinsics_rgb.cx,
+					this->kcal->intrinsics_rgb.cy,
+					P);
+
+			this->curr_proj_mx = P;
+			this->curr_ground_nor = est_nor;
+			this->curr_ground_height = est_ground_height;
+
+			// update variables to be published
+			see_ground = 1;
+
+		}else{
+			cout << "Check 4 fails: uneven ground height: maybe stair or chair" << endl;
+
+			est_nor = this->curr_ground_nor;
+			est_ground_height = this->curr_ground_height;
+			P = this->curr_proj_mx;
+
+		}
+	}
+
+	// translate the cloud by est height
+	Eigen::Matrix4d trans_mx1;
+	trans_mx1 <<
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, -est_ground_height,
+			0, 0, 0, 1;
+	pcl::transformPointCloud(*cloud.get(), *cloud.get(), trans_mx1);
+	trans_mx *= trans_mx1;
+	ground_height = est_ground_height;
+
+	// refine im_ground
+	for(int i = 0; i < cloud->width; i++){
+		for(int j = 0; j < cloud->height; j++){
+			if(im_ground.at<uchar>(j, i) > 0){
+				if(abs(cloud->at(i, j).z) > 0.05){
+					im_ground.at<uchar>(j, i) = 0;
+				}
+			}
+		}
+	}
+	
+	/////////////////////////////////////////////////////////
+	// occupancy grid: bird's view (6m x 6m)
+	/////////////////////////////////////////////////////////
+	
+	std::vector<cv::Point> dense_ground_pts;// if hit an obstacle
+	std::vector<cv::Point> hit_pts;			// if hit an obstacle
+	std::vector<int> is_hits;
+	std::vector<int> enter_dense_zones;
+	std::vector<Eigen::Vector3d> dense_ground_3d_pts;
+	std::vector<Eigen::Vector3d> hit_3d_pts;
+
+	cv::Mat im_g = cv::Mat::zeros(300, 300, CV_8UC1);
+	cv::Mat im_g1 = cv::Mat::zeros(300, 300, CV_8UC4);
+	cv::Mat im_m = cv::Mat::zeros(cloud->height, cloud->width, CV_8UC1);
+
+	rv::get_occupancy_grid_view(cloud, im_v, im_h,
+			im_m, im_g, im_g1);
+
+	cv::Mat im_occupancy = cv::Mat::zeros(300, 300, CV_8UC1);
+	rv::get_occupancy_grid(cloud, im_v, im_h, im_ground, im_occupancy);
+
+	rv::get_occupancy_grid_polar_pts(
+			im_g,
+			dense_ground_pts, hit_pts, is_hits, enter_dense_zones,
+			this->motor_num, this->patch_density);
+
+	for(int i = 0; i < this->motor_num; i++){
+		Eigen::Vector3d hit_pt, dense_ground_pt;
+		dense_ground_pt << (double)(300 - dense_ground_pts[i].y) / 300 * 6,
+				(double)(150 - dense_ground_pts[i].x) / 300 * 6,
+				0;
+		dense_ground_3d_pts.push_back(dense_ground_pt);
+
+		hit_pt << (double)(300 - hit_pts[i].y) / 300 * 6,
+				(double)(150 - hit_pts[i].x) / 300 * 6,
+				0;
+		hit_3d_pts.push_back(hit_pt);
+
+		ranges_m_dense.push_back(dense_ground_pt.norm());
+		ranges_m_hit.push_back(hit_pt.norm());
+	}
+
+	/////////////////////////////////////////////////////////
+	// Final ranges of each direction
+	/////////////////////////////////////////////////////////
+
+	cout << this->motor_num << endl;
+
+	for(int i = 0; i < this->motor_num; i++){
+		float range = 0;
+		int use_ir_idx = 0;
+		if(ranges_ir_valid[i] < 0.15){
+			range = 0.2;
+			use_ir_idx = 1;
+		}else if(ranges_m_ir[i] < 0.5){
+			range = ranges_m_ir[i];
+			use_ir_idx = 2;
+		}else if(see_ground == 0){	// force to use ir
+			range = ranges_m_ir[i];
+			use_ir_idx = 2;
+		}else if(enter_dense_zones[i] == 0){ // never enter dense ground
+			range = ranges_m_ir[i];
+			use_ir_idx = 2;
+		}else{
+			range = ranges_m_dense[i];
+			//range = ranges_m_hit[i];
+			use_ir_idx = 3;
+		}
+		ranges_state.push_back(use_ir_idx);
+		ranges_m.push_back(range);
+	}
+
+	cout << "Ranges:\t";
+	for(int i = 0; i < ranges_m.size(); i++){
+		cout << ranges_m[i] << ", ";
+	}
+	cout << endl;
+
+	//////////////////////////////////////////////////////////////////
+	// Find region proposals
+	//////////////////////////////////////////////////////////////////
+	vector<std::vector<Eigen::Vector3d> > cubes_obj_corners;
+	vector<std::vector<cv::Point> > cubes_img_corners;
+	for(int i = 0; i < hit_pts.size(); i++){
+		// shift the end_pt by (-0.25, 0.5, 0)
+		hit_3d_pts[i] += Eigen::Vector3d(0.15, 0.15, 0);
+
+		// draw a cube at each end_pt
+		std::vector<Eigen::Vector3d> obj_corners;
+		std::vector<cv::Point> img_corners;
+		Eigen::Vector3d cube_dim;
+		cube_dim << 0.3, 0.3, 1.0;
+		rv::get_cube_corners(hit_3d_pts[i], cube_dim, obj_corners);
+		rv::get_relative_obj_img_corners(P, obj_corners, img_corners);
+
+		cubes_obj_corners.push_back(obj_corners);
+		cubes_img_corners.push_back(img_corners);
+
+		// draw 3d cube
+		//rv::draw_cube_lcmgl(lcmgl_haptic, obj_corners);
+	}
+
+
+	//////////////////////////////////////////////////////////////////
+	// Recognize objects
+	/////////////////////////////////////////////////////////////////
+	//vector<int> obj_ids;
+	//				max_idx	out_idx out_char
+	// no ground: 			-1		O
+	// freespace: 			0	   "f"
+	// wall:		0		1		w	<-- will be decided in wall/gate detection
+	// chair:		1		2		c
+	// table:		2		3		t
+	// stair up:	3		4		u
+	// stair down:	4		5		d
+	// obstacle:			99		o
+	// gate					6		g
+
+	int x_i, y_i, w_i, h_i;
+	int obj_id_i = -1;
+	string obj_char_i = " ";
+
+//	if(see_ground == 1){
+
+	// Depth Only Approach
+	float height_min = -0.35;
+	float height_step = 0.1;
+	int height_max_idx = 18;
+	int vec_size = 2 * height_max_idx;
+*/
+	//		stringstream ss_file;
+	//		ss_file << "/home/drc/data/wear-navi-objs/tables";
+/*
+	for(int i = 0; i < cubes_img_corners.size(); i++){
+		//		if(ranges_state[i] == 1){
+		//			obj_ids.push_back(-1);
+		//			obj_chars.push_back("o");
+		//
+		//			bbox_rgb_xs.push_back(0);
+		//			bbox_rgb_ys.push_back(0);
+		//			bbox_rgb_ws.push_back(1);
+		//			bbox_rgb_hs.push_back(1);
+		//
+		//			bbox_d_xs.push_back(0);
+		//			bbox_d_ys.push_back(0);
+		//			bbox_d_ws.push_back(1);
+		//			bbox_d_hs.push_back(1);
+		//
+		//		}else if (is_hits[i] > 0){
+		cv::Rect bbox_rgb = cv::boundingRect(Mat(cubes_img_corners[i]));
+		bbox_rgb = bbox_rgb & cv::Rect(0, 0, im_rgb.cols, im_rgb.rows);
+
+		cv::Rect bbox_depth = cv::Rect(
+				bbox_rgb.x / this->kinect_decimate,
+				bbox_rgb.y / this->kinect_decimate,
+				bbox_rgb.width / this->kinect_decimate,
+				bbox_rgb.height / this->kinect_decimate);
+		bbox_depth = bbox_depth & Rect(0, 0, im_v.cols, im_v.rows);
+
+		bbox_rgb_xs.push_back(bbox_rgb.x);
+		bbox_rgb_ys.push_back(bbox_rgb.y);
+		bbox_rgb_ws.push_back(bbox_rgb.width);
+		bbox_rgb_hs.push_back(bbox_rgb.height);
+
+		bbox_d_xs.push_back(bbox_depth.x);
+		bbox_d_ys.push_back(bbox_depth.y);
+		bbox_d_ws.push_back(bbox_depth.width);
+		bbox_d_hs.push_back(bbox_depth.height);
+
+		// get feature vector
+		cv::Mat nor_height_vec = cv::Mat::zeros(1, vec_size, CV_32FC1);
+		rv::get_nor_height_vec(bbox_depth,
+				cloud, im_v, im_h, im_ground,
+				nor_height_vec,
+				height_min, height_step, height_max_idx);
+
+		Scalar s_sum = cv::sum(nor_height_vec);
+		int sum_vh_pts = s_sum[0];
+		float avg_vh_pts = (float) sum_vh_pts / (float)(bbox_depth.area());
+
+		// linear classifier
+		Eigen::MatrixXf ml_x = Eigen::MatrixXf(vec_size, 1);
+		for(int j = 0; j < vec_size; j++){
+			ml_x(j, 0) = nor_height_vec.at<float>(0, j);
+		}
+
+		Eigen::MatrixXf ml_wx = this->ml_w * ml_x + this->ml_b;
+
+		// get the highest activation idx
+		float max_activation = 0;
+		int max_idx = -1;
+		for(int j = 0; j < this->ml_k; j++){
+			if(ml_wx(j, 0) > max_activation){
+				max_activation = ml_wx(j, 0);
+				max_idx = j;
+			}
+		}
+
+		//cout << ml_wx << endl;
+		//cout << "max: " << max_idx << "\t activation: " << max_activation << endl;
+
+		// default obstacle
+		int out_idx = 99;
+		string out_char = "o";
+
+		if(ranges_m[i] > 2.4){
+			out_idx = 0;
+			out_char = "f";
+
+			// wall
+		}else if(max_idx == 0){
+			// not very successful by the normal,
+			// let's just call it an obstacle for now
+			//rv::get_flat_surface(bbox_depth, im_n, im_v);
+			// will confirm in gate/wall detection
+			out_idx = 1;
+			out_char = "o";
+			// chair
+		}else if(max_idx == 1){
+			out_idx = 2;
+			out_char = "c";
+			// table
+		}else if(max_idx == 2){
+			out_idx = 3;
+			//out_char = "t";
+			out_char = "o";
+			// stair up
+		}else if(max_idx == 3){
+			out_idx = 4;
+			//out_char = "u";
+			out_char = "o";
+			// stair down
+		}else if(max_idx == 4){
+			out_idx = 5;
+			out_char = "o";
+		}
+
+		obj_ids.push_back(out_idx);
+		obj_chars.push_back(out_char);
+
+		//				 ********************************
+		//				 * write for trainign data
+		//				 ********************************
+		//				stringstream ss_file_img;
+		//				ss_file_img << ss_file.str() << "/images/";
+		//				ss_file_img << msg->timestamp << "-" << i << ".png";
+		//				Mat im_out;
+		//				cv::cvtColor(im_rgb(bbox_rgb), im_out, CV_RGB2BGR);
+		//				cv::imwrite(ss_file_img.str(), im_out);
+		//
+		//				stringstream ss_out_v;
+		//				ss_out_v << msg->timestamp << "-" << i << "\t"
+		//						<<	ranges_m_hit[i] << "\t"
+		//						<< sum_vh_pts << "\t"
+		//						<< avg_vh_pts << "\t";
+		//				for(int k = 0; k < nor_height_vec.cols; k++){
+		//					ss_out_v << nor_height_vec.at<float>(0, k) << "\t";
+		//				}
+		//
+		//				ofstream myfile;
+		//				stringstream ss_file_txt;
+		//				ss_file_txt << ss_file.str() << "/features/";
+		//				ss_file_txt << msg->timestamp << "-" << i << ".txt";
+		//				//cout << ss_file_txt.str() << endl;
+		//				myfile.open (ss_file_txt.str().c_str());
+		//				myfile << ss_out_v.str();
+		//				myfile.close();
+		//		}else{
+		//			// free space
+		//			obj_ids.push_back(0);
+		//			obj_chars.push_back("f");
+		//
+		//			bbox_rgb_xs.push_back(0);
+		//			bbox_rgb_ys.push_back(0);
+		//			bbox_rgb_ws.push_back(1);
+		//			bbox_rgb_hs.push_back(1);
+		//
+		//			bbox_d_xs.push_back(0);
+		//			bbox_d_ys.push_back(0);
+		//			bbox_d_ws.push_back(1);
+		//			bbox_d_hs.push_back(1);
+		//
+		//		}
+	}
+//	}else{ // cannot see ground
+//		for(int k = 0; k < this->motor_num; k++){
+//
+//			int obj_id = -1;
+//
+//			obj_chars.push_back("o");
+//			obj_ids.push_back(obj_id);
+//
+//			bbox_rgb_xs.push_back(0);
+//			bbox_rgb_ys.push_back(0);
+//			bbox_rgb_ws.push_back(1);
+//			bbox_rgb_hs.push_back(1);
+//
+//			bbox_d_xs.push_back(0);
+//			bbox_d_ys.push_back(0);
+//			bbox_d_ws.push_back(1);
+//			bbox_d_hs.push_back(1);
+//		}
+//	}
+
+	// check if any "c" detection, find the closest one
+	int det_chair_dir = -1;
+	float det_chair_range = 4.0;
+	for(int i = 0; i < this->motor_num; i++){
+		if(obj_chars[i] == "c" && ranges_m[i] < det_chair_range){
+			det_chair_dir = i;
+			det_chair_range = ranges_m[i];
+		}
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////
+	// Gate and Wall detection
+	////////////////////////////////////////////////////////////////////////////////////
+	for(int i = 0; i < this->motor_num - 2; i++){
+		// check consecutive 3 directions
+		int idx0, idx1, idx2;
+		idx0 = obj_ids[i];
+		idx1 = obj_ids[i+1];
+		idx2 = obj_ids[i+2];
+		Eigen::Vector3d pt0 = hit_3d_pts[i];
+		Eigen::Vector3d pt1 = hit_3d_pts[i+1];
+		Eigen::Vector3d pt2 = hit_3d_pts[i+2];
+
+		Eigen::Vector3d d_01 = pt0 - pt1;
+		Eigen::Vector3d d_12 = pt1 - pt2;
+		Eigen::Vector3d d_02 = pt0 - pt2;
+
+		double m1 = d_01[0] / d_01[1];
+		double m2 = d_12[0] / d_12[1];
+		double m3 = d_02[0] / d_02[1];
+
+		//cout << "slope: " <<  m1 << ", " << m2 << ", " << m3 << endl;
+
+		if(idx0 == 1 && idx1 == 1 && idx2 == 1){
+
+		}
+	}
+
+
+	/////////////////////////////////////////////////////////
+	// trajectory library
+	/////////////////////////////////////////////////////////
+
+
+	////////////////////////////////////////////////////////////////////////////////////
+	// Object and distance to Braille
+	// Cell1	Cell2	Cell3	Cell4	Cell5
+	////////////////////////////////////////////////////////////////////////////////////
+
+	cout << "Braille:" << endl;
+
+	stringstream ss_tts; // also for braille
+
+	if(this->braille_display_mode == 1){
+		//
+		for(int i = 0; i < this->motor_num; i++){
+			ss_tts << obj_chars[i];
+		}
+		cout << ss_tts.str() << endl;
+
+		// within 1M
+		for(int i = 0; i < this->motor_num; i++){
+			if(ranges_m[i] < 1){
+				ss_tts << obj_chars[i];
+			}else{
+				// free space
+				ss_tts << "f";
+			}
+		}
+		cout << ss_tts.str().substr(5, 5) << endl;
+
+		tts_data = ss_tts.str();
+
+	}else if(this->braille_display_mode == 2){
+		// show chair
+
+		string command = "n"; // do nothing
+
+		// not chair detected, random walk, only make sure front is safe
+		if (det_chair_dir < 0){
+			// make sure front is safe
+			if (ranges_m[2] < 0.7){
+				command = "s";
+			}
+		}
+
+		// found a chair, assume turn is safe
+		if(det_chair_dir < 2){
+			// turn left
+			command = "l";
+		}else if(det_chair_dir > 2){
+			// turn right
+			command = "r";
+		}else if(det_chair_dir == 2){
+			// chair is in front
+			if (ranges_m[2] < 0.7){
+				// reach goal
+				command = "g";
+			}else{
+				// front, go forward
+				command = "w";
+			}
+		}
+
+		ss_tts << command;
+
+		for(int i = 1; i < this->motor_num; i++){
+			ss_tts << " ";
+		}
+		cout << ss_tts.str() << endl;
+		//cout << "front idx:\t" << front_idx << endl;
+
+		// second row shows detected objects or freespace
+		// in 5 angular directions
+		for(int i = 0; i < this->motor_num; i++){
+			ss_tts << obj_chars[i];
+		}
+		cout << ss_tts.str().substr(5, 5) << endl;
+
+		tts_data = ss_tts.str();
+	}else if(this->braille_display_mode == 3){
+
+		// first row shows forward range
+		// min of front, bare left/right
+		float min_front = ranges_m[2];
+
+		int front_idx = (int)(min_front / 0.6);
+		for(int i = 0; i < this->motor_num; i++){
+			if (i < front_idx){
+				ss_tts << "f";
+			}else if(i == front_idx){
+				ss_tts << obj_chars[2]; // object at front
+			}else if(i > front_idx){
+				ss_tts << " ";
+			}
+		}
+		cout << ss_tts.str() << endl;
+		//cout << "front idx:\t" << front_idx << endl;
+
+		// second row shows detected objects or freespace
+		// in 5 angular directions
+		for(int i = 0; i < this->motor_num; i++){
+			ss_tts << obj_chars[i];
+		}
+		cout << ss_tts.str().substr(5, 5) << endl;
+
+		tts_data = ss_tts.str();
+	}else if(this->braille_display_mode == 4){
+
+		// pin mode
+
+		for(int i = 0; i < 5; i++){
+
+			int idx = 0;
+			for(int j = 0; j < 7; j++){
+				if(ranges_m[i] < (float)(j+1) * 0.3){
+					idx = j;
+					break;
+				}
+			}
+			cout << idx << " " << pow(2,  idx) << endl;
+			char c = pow(2,  idx);
+			ss_tts << c;
+			ss_tts << c;
+		}
+		cout << ss_tts.str() << endl;
+
+		tts_data = ss_tts.str();
+	}
+
+
+	////////////////////////////////////////////////////////////////////////////////////
+	// Range to Vibration Pattern
+	////////////////////////////////////////////////////////////////////////////////////
+
+	vector<int> h_intensities;
+	vector<int> h_frequencies;
+	vector<int> h_states;
+
+	float min_r;
+	float max_r;
+
+
+	min_r = this->haptic_min_range;
+	max_r = this->haptic_max_range;
+
+	// init all motors
+	for(int i = 0; i < ranges_m.size(); i++){
+		int out_freq = 1;	// frequency
+		int out_level = 1; 	// intensity
+		int out_st = 1;		// state
+
+		h_intensities.push_back(out_level);
+		h_frequencies.push_back(out_freq);
+		h_states.push_back(out_st);
+	}
+
+	if(this->haptic_vibration_pattern == 1){
+
+		// map to each direction
+		for(int i = 0; i < ranges_m.size(); i++){
+
+			if(ranges_m[i] <= min_r){
+				h_frequencies[i] = 4;
+				h_intensities[i] = 7;
+			}else if(ranges_m[i] > max_r){
+				h_frequencies[i] = 1;
+				h_intensities[i] = 1;
+			}else{
+				h_frequencies[i] = 3;
+				h_intensities[i] = 4;
+			}
+		}
+
+	}
+
+
+	if(this->haptic_vibration_pattern == 3){
+
+		// map to each direction
+		for(int i = 0; i < ranges_m.size(); i++){
+
+			if(i == 0 || i == 4){
+				if(ranges_m[i] <= min_r){
+					h_frequencies[i] = 4;
+					h_intensities[i] = 7;
+				}else{
+					h_frequencies[i] = 1;
+					h_intensities[i] = 1;
+				}
+			}
+		}
+
+	}
+
+	// trajectory
+	// trajlib_longest_idx:
+	// 0: straight
+	// 1: turn left
+	// 2: turn right
+	// 3: bare right
+	// 4: bare left
+	if(this->haptic_vibration_pattern == 4){
+
+
+	}
+
+	// steering to search object
+	if(this->haptic_vibration_pattern == 5){
+		cout << "detect chair at: " << det_chair_dir << endl;
+		if(det_chair_dir >= 0 && det_chair_dir < 2){
+			// found a chair, left hand side
+			h_frequencies[0] = 4;
+			h_intensities[0] = 7;
+		}else if(det_chair_dir == 2){
+			// found a chair, front
+			h_frequencies[4] = 2;
+			h_intensities[4] = 7;
+		}else if(det_chair_dir > 2){
+			// found a chair, right hand side
+			h_frequencies[4] = 4;
+			h_intensities[4] = 7;
+		}
+	}
+
+	// front checking, overwrite other settings
+	if(this->haptic_vibration_pattern >= 2){
+
+		// check direction 1, 2, and 3
+		int is_close = 0;
+		for(int i = 1; i < 4; i++){
+			if(ranges_m[i] <= min_r){
+				is_close = 1;
+				break;
+			}
+		}
+
+		// set front motor
+		if(is_close > 0){
+			h_frequencies[2] = 4;
+			h_intensities[2] = 7;
+		}
+
+		// turn other things off
+
+	}
+
+//	for(int i = 0; i < ranges_m.size(); i++){
+//
+//		int out_freq = 0;	// frequency
+//		int out_level = 0; 	// intensity
+//		int out_st = 1;		// state
+//
+//		// intensity changes, frequency stays the same
+//		if(this->haptic_vibration_pattern == 1){
+//
+//			min_r = this->haptic_min_range;
+//			max_r = this->haptic_max_range;
+//
+//			// frequency and state don't change
+//			out_freq = 3;
+//
+//			int jn = this->haptic_just_notice_array[i];
+//			int num_level = 7 - jn;
+//			float r_step = (max_r - min_r) / (float) num_level;
+//
+//			if(ranges_m[i] <= min_r){
+//				out_level = 7;
+//			}else if(ranges_m[i] > max_r){
+//				out_level = 0;
+//			}else{
+//				out_level = 7 - (int)((ranges_m[i] - min_r) / r_step)-1;
+//			}
+//		}else if(this->haptic_vibration_pattern == 2){
+//
+//			if(ranges_m[i] <= 0.8){
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(ranges_m[i] < 1.2){
+//				out_freq = 4;
+//				out_level = 5;
+//			}else if(ranges_m[i] < 1.6){
+//				out_freq = 3;
+//				out_level = 4;
+//			}else if(ranges_m[i] < 2.0){
+//				out_freq = 2;
+//				out_level = 4;
+//			}else if(ranges_m[i] < 2.4){
+//				out_freq = 2;
+//				out_level = 2;
+//			}else{
+//				out_freq = 1;
+//				out_level = 1;
+//			}
+//
+//
+//		}else if(this->haptic_vibration_pattern == 3){
+//			// only use 3 motors, turn off 1 and 3
+//
+//			min_r = this->haptic_min_range;
+//			max_r = this->haptic_max_range;
+//
+//			out_st = 1;		// state; doesn't matter now
+//
+//			if(i == 1 || i == 3){
+//				out_freq = 1;
+//				out_level = 1;
+//			}else if(ranges_m[i] <= min_r){
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(ranges_m[i] > max_r){
+//				out_freq = 1;
+//				out_level = 1;
+//			}else{
+//				out_freq = 3;
+//				out_level = 3;
+//			}
+//
+//		}else if(this->haptic_vibration_pattern == 4){
+//			// trajectory
+//
+//			min_r = this->haptic_min_range;
+//			max_r = this->haptic_max_range;
+//
+//			out_st = 1;		// state; doesn't matter now
+//
+//			if(i == 2){
+//				if(ranges_m[i] <= min_r){
+//					// front motor should vibrate for close obstacle
+//					out_freq = 4;
+//					out_level = 7;
+//				}else{
+//					// otherwise free
+//					out_freq = 1;
+//					out_level = 1;
+//				}
+//			}else if(ranges_m[i] <= min_r){
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(ranges_m[i] > max_r){
+//				out_freq = 1;
+//				out_level = 1;
+//			}else{
+//				out_freq = 3;
+//				out_level = 3;
+//			}
+//
+//			trajlib_longest_idx
+//
+//		}else if(this->haptic_vibration_pattern == 5){
+//			// steering to search object
+//
+//			min_r = this->haptic_min_range;
+//			max_r = this->haptic_max_range;
+//
+//			if(i == 1 || i == 3){
+//				out_freq = 1;
+//				out_level = 1;
+//			}else if(i == 2 && ranges_m[i] <= min_r){
+//				// front motor should vibrate for close obstacle
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(i == 0  && det_chair_dir >= 0 && det_chair_dir < 2){
+//				// found a chair, left hand side
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(i == 4  && det_chair_dir >= 0 && det_chair_dir > 2){
+//				// found a chair, right hand side
+//				out_freq = 4;
+//				out_level = 7;
+//			}else{
+//				// stay quiet otherwise
+//				out_freq = 1;
+//				out_level = 1;
+//			}
+//
+//		}else {	// use a pre-defined setting
+//
+//			min_r = this->haptic_min_range;
+//			max_r = this->haptic_max_range;
+//
+//			out_st = 1;		// state; doesn't matter now
+//
+//			if(ranges_m[i] <= min_r){
+//				out_freq = 4;
+//				out_level = 7;
+//			}else if(ranges_m[i] > max_r){
+//				out_freq = 1;
+//				out_level = 1;
+//			}else{
+//				out_freq = 3;
+//				out_level = 3;
+//			}
+//		}
+//
+//		h_intensities.push_back(out_level);
+//		h_frequencies.push_back(out_freq);
+//		h_states.push_back(out_st);
+//	}
+
+	cout << "Haptics:\n";
+	for(int i = 0; i < ranges_m.size(); i++){
+		cout << h_intensities[i] << "\t";
+	}
+	cout << endl;
+	for(int i = 0; i < ranges_m.size(); i++){
+		cout << h_frequencies[i] << "\t";
+	}
+	cout << endl;
+
+	////////////////////////////////////////////////////////////////////////////////////
+	// Output to Haptic Array
+	////////////////////////////////////////////////////////////////////////////////////
+
+    // data to be published
+    obstacle_haptic_array_t array_data;
+    array_data.utime = bot_timestamp_now();
+    array_data.state_id = state_id;
+    array_data.num_ranges = num_ranges;
+
+    array_data.num_traj = 5;
+
+    array_data.has_input = has_input;
+    array_data.see_ground = see_ground;
+    array_data.ground_height = ground_height;
+    array_data.ground_height_std = ground_height_std;
+
+    // xyzrpy
+    Eigen::Matrix4d trans_mx_out = trans_mx_init * trans_mx;
+    double q_out[4];
+    double rpy_out[3];
+    double mx_out[9];
+
+    mx_out[0] = trans_mx_out(0, 0);
+    mx_out[1] = trans_mx_out(0, 1);
+    mx_out[2] = trans_mx_out(0, 2);
+    mx_out[3] = trans_mx_out(1, 0);
+    mx_out[4] = trans_mx_out(1, 1);
+    mx_out[5] = trans_mx_out(1, 2);
+    mx_out[6] = trans_mx_out(2, 0);
+    mx_out[7] = trans_mx_out(2, 1);
+    mx_out[8] = trans_mx_out(2, 2);
+
+    bot_matrix_to_quat(mx_out, q_out);
+    bot_quat_to_roll_pitch_yaw(q_out, rpy_out);
+    array_data.trans_xyzrpy[0] = trans_mx_out(0, 3);
+    array_data.trans_xyzrpy[1] = trans_mx_out(1, 3);;
+    array_data.trans_xyzrpy[2] = trans_mx_out(2, 3);;
+    array_data.trans_xyzrpy[3] = rpy_out[0];
+    array_data.trans_xyzrpy[4] = rpy_out[1];
+    array_data.trans_xyzrpy[5] = rpy_out[2];
+
+    cout << "Pitch: " << rpy_out[1] * 180.0 / M_PI << " degrees" << endl;
+
+    int16_t out_ranges_state[array_data.num_ranges];
+    double out_ranges_m[array_data.num_ranges];
+
+    double out_ranges_m_ir[array_data.num_ranges];
+    double out_ranges_ir_valid[array_data.num_ranges];
+
+    double out_ranges_m_dense[array_data.num_ranges];
+    double out_ranges_m_hit[array_data.num_ranges];
+
+    int16_t out_ranges_trajlib_hit[array_data.num_traj];
+
+    int16_t out_obj_ids[array_data.num_ranges];
+
+    int16_t out_bbox_rgb_xs[array_data.num_ranges];
+    int16_t out_bbox_rgb_ys[array_data.num_ranges];
+    int16_t out_bbox_rgb_ws[array_data.num_ranges];
+    int16_t out_bbox_rgb_hs[array_data.num_ranges];
+
+    int16_t out_bbox_d_xs[array_data.num_ranges];
+    int16_t out_bbox_d_ys[array_data.num_ranges];
+    int16_t out_bbox_d_ws[array_data.num_ranges];
+    int16_t out_bbox_d_hs[array_data.num_ranges];
+
+    // vibration motors
+    double out_h_min_r = min_r;
+    double out_h_max_r = max_r;
+    int16_t out_h_pattern_setting = this->haptic_vibration_pattern;
+
+    int16_t out_ranges[array_data.num_ranges];
+    int16_t out_intensities[array_data.num_ranges];
+    int16_t out_frequencies[array_data.num_ranges];
+    int16_t out_states[array_data.num_ranges];
+
+    for(int i = 0; i < num_ranges; i++){
+    	out_ranges_state[i] 	= ranges_state[i];
+    	out_ranges_m[i]			= ranges_m[i];
+
+    	out_ranges_m_ir[i] 		= ranges_m_ir[i];
+    	out_ranges_ir_valid[i] 	= ranges_ir_valid[i];
+
+    	out_ranges_m_dense[i]	= ranges_m_dense[i];
+    	out_ranges_m_hit[i]		= ranges_m_hit[i];
+
+    	out_obj_ids[i]			= obj_ids[i];
+
+    	// vibration motors
+    	out_ranges[i] 		= 0;
+    	out_intensities[i]	= h_intensities[i];
+    	out_frequencies[i] 	= h_frequencies[i];
+    	out_states[i]		= h_states[i];
+
+    	// bbox
+    	out_bbox_rgb_xs[i]	= bbox_rgb_xs[i];
+    	out_bbox_rgb_ys[i]	= bbox_rgb_ys[i];
+    	out_bbox_rgb_ws[i]	= bbox_rgb_ws[i];
+    	out_bbox_rgb_hs[i]	= bbox_rgb_hs[i];
+
+    	out_bbox_d_xs[i]	= bbox_d_xs[i];
+    	out_bbox_d_ys[i]	= bbox_d_ys[i];
+    	out_bbox_d_ws[i]	= bbox_d_ws[i];
+    	out_bbox_d_hs[i]	= bbox_d_hs[i];
+    }
+
+    for(int i = 0; i < 5; i++){
+    	out_ranges_trajlib_hit[i] = 0;
+    }
+
+    array_data.ranges_state 	= out_ranges_state;
+    array_data.ranges_m 		= out_ranges_m;
+
+    array_data.ranges_m_ir 		= out_ranges_m_ir;
+    array_data.ranges_ir_valid	= out_ranges_ir_valid;
+
+    array_data.ranges_m_dense 	= out_ranges_m_dense;
+    array_data.ranges_m_hit 	= out_ranges_m_hit;
+    array_data.ranges_trajlib_hit 	= out_ranges_trajlib_hit;
+
+    array_data.obj_ids 			= out_obj_ids;
+
+    array_data.h_min_r 			= out_h_min_r;
+    array_data.h_max_r 			= out_h_max_r;
+    array_data.h_pattern_setting = out_h_pattern_setting;
+
+    array_data.ranges			= out_ranges;
+    array_data.intensities 		= out_intensities;
+    array_data.frequencies 		= out_frequencies;
+    array_data.states 			= out_states;
+
+    array_data.tts_data = (char*) tts_data.c_str();
+
+    array_data.bbox_rgb_xs = out_bbox_rgb_xs;
+    array_data.bbox_rgb_ys = out_bbox_rgb_ys;
+    array_data.bbox_rgb_ws = out_bbox_rgb_ws;
+    array_data.bbox_rgb_hs = out_bbox_rgb_hs;
+
+    array_data.bbox_d_xs = out_bbox_d_xs;
+    array_data.bbox_d_ys = out_bbox_d_ys;
+    array_data.bbox_d_ws = out_bbox_d_ws;
+    array_data.bbox_d_hs = out_bbox_d_hs;
+
+	obstacle_haptic_array_t_publish(this->lcm_, "HAPTIC_ARRAY", &array_data);
+
+	t_tot = cvGetTickCount() - t_tot;
+	cout << "Total processing for one frame " << t_tot/((double)cvGetTickFrequency()*1000.) << " ms." << endl;
+
+	////////////////////////////////////////////////////////////////////////////////////
+	// Visualization
+	////////////////////////////////////////////////////////////////////////////////////
+
+	// no vis
+	if(this->publish_lcmgl == 0){
+		// clean up
+		free(rgb_buf_);
+		free(depth_img);
+		return;
+	}else{
+
+		// variables to visualize
+		// 1. ground (green): im_ground
+		// 2. range to obstacles/objects (blue)
+		// 3. obstacles/objects (red)
+
+		// Visualization at:
+		// * RGB
+		// * Occupancy Grid
+		// * 3D viewer
+
+		/////////////////////////////////////////////////////////////
+		// * Camera View
+		/////////////////////////////////////////////////////////////
+		cv::Mat im_rgb_blend = cv::Mat(480, 640, CV_8UC3);
+		cv::Mat im_rgb_mask = cv::Mat::zeros(480, 640, CV_8UC3);
+
+		int d = this->kinect_decimate;
+
+		if(this->publish_lcmgl == 1){
+			// draw the ground (free space) on the mask
+			for(int i = 0; i < im_ground.cols; i++){
+				for(int j = 0; j < im_ground.rows; j++){
+					if(im_ground.at<uchar>(j, i)  == 0){
+						continue;
+					}else if(im_ground.at<uchar>(j, i) == 255){
+						Scalar color = cv::Scalar(0, 255, 0);
+						im_rgb_mask(cv::Rect(i * d, j * d, d, d)).setTo(color);
+
+					}
+				}
+			}
+
+			cv::addWeighted(im_rgb, 0.85, im_rgb_mask, 0.15, 0.0, im_rgb_blend);
+
+		}else if(this->publish_lcmgl == 2){
+
+			cv::addWeighted(im_depth_vis, 1, im_rgb_mask, 0, 0.0, im_rgb_blend);
+		}
+
+		// draw bbox ;
+		for(int i = 0; i < cubes_img_corners.size(); i++){
+			if (is_hits[i] > 0){
+				// draw cube
+				//rv::draw_cube_img_corners(im_rgb_blend, cubes_img_corners[i]);
+
+				cv::Scalar s;
+				//cout << obj_ids[i] << endl;
+				if(obj_ids[i] == 2){
+					s = cv::Scalar(0, 0, 255);
+				}else{
+					s = cv::Scalar(255, 0, 255);
+				}
+
+				// draw bounding rect
+				cv::Rect bbox = cv::boundingRect(Mat(cubes_img_corners[i]));
+				cv::rectangle(im_rgb_blend, bbox.tl(), bbox.br(),
+						s, 2);
+
+				// draw 3d cubes
+				if(obj_ids[i] == 2){
+					rv::draw_cube_lcmgl(lcmgl_haptic, cubes_obj_corners[i]);
+				}else{
+					rv::draw_cube_lcmgl(lcmgl_haptic, cubes_obj_corners[i], 1, 0, 1);
+				}
+
+			}
+
+
+		}
+
+		cv_bridge->publish_mjpg(im_rgb_blend, (char*)"IMAGE_MASK");
+		cv::Mat im_rgb_tiny1 = cv::Mat(240, 320, CV_8UC3);
+		cv::Mat im_rgb_tiny = cv::Mat(120, 160, CV_8UC3);
+		cv::pyrDown(im_rgb_blend, im_rgb_tiny1, Size(im_rgb_tiny1.cols, im_rgb_tiny1.rows));
+		cv::pyrDown(im_rgb_tiny1, im_rgb_tiny, Size(im_rgb_tiny.cols, im_rgb_tiny.rows));
+		cv::cvtColor(im_rgb_tiny, im_rgb_tiny, CV_RGB2BGR);
+		cv_bridge->publish_mjpg(im_rgb_tiny, (char*)"IMAGE_MASK_TINY");
+
+		/////////////////////////////////////////////////////////////
+		// * Occupancy Grid View
+		/////////////////////////////////////////////////////////////
+		std::vector<cv::Rect> blocks;
+		std::vector<Eigen::Vector3d> end_pts;
+
+		Mat im_g_vis = Mat::zeros(im_g.rows, im_g.cols, CV_8UC3);
+		Mat im_g_tiny = Mat::zeros(im_g.rows/2, im_g.cols/2, CV_8UC3);
+
+		if(this->haptic_array_mode == 1){
+			vector<int> grids;
+			grids.push_back(5);
+			blocks = rv::get_haptic_range_grids_bboxes(grids,
+					cloud->height, cloud->width, 16 / this->kinect_decimate);
+
+			Eigen::Vector3d st_pt;
+			st_pt << trans_mx(0, 3), trans_mx(1, 3), trans_mx(2, 3);
+
+			for(int i = 0; i < blocks.size(); i++){
+				Rect r = blocks[i];
+				Rect r_vis = Rect(
+						r.x * this->kinect_decimate,
+						r.y * this->kinect_decimate,
+						r.width * this->kinect_decimate,
+						r.height * this->kinect_decimate);
+				cv::Point c_pt = cv::Point(r_vis.x + r_vis.width / 2, r_vis.y + r_vis.height / 2);
+
+				// Draw 2D
+				cv::rectangle(im_rgb_blend, r_vis.tl(), r_vis.br(), Scalar(0, 0, 255), 3);
+				cv::circle(im_rgb_blend, c_pt, 2, Scalar(0, 0, 255), 3);
+
+				// Access 3D end points and draw 3D
+				Eigen::Vector3d end_pt = rv::get_cloud_3d_point(c_pt,
+						im_rgb_blend, cloud);
+				rv::draw_line_lcmgl(lcmgl_haptic, st_pt, end_pt);
+			}
+
+			/////////////////////////////////////////////////////////////
+			// * Occupancy Grid
+			/////////////////////////////////////////////////////////////
+		}else if(this->haptic_array_mode == 2){
+			// mid-level processing
+
+			// visualize occupancy grid (bird's view)
+			for(int i = 0; i < im_g.cols; i++){
+				for(int j = 0; j < im_g.rows; j++){
+					if(im_g.at<uchar>(j, i) == 255){
+						im_g_vis.at<Vec3b>(j, i)[1] = 255; // Green: ground plane
+					}else if(im_g.at<uchar>(j, i) == 1){
+						im_g_vis.at<Vec3b>(j, i)[0] = 255; // red: obstacle
+					}
+				}
+			}
+
+//			if(found_ground > 0){
+//				// origin
+//				cv::Point pt_o = cv::Point(im_g.cols / 2, im_g.rows);
+//				for(int i = 0; i < hit_pts.size(); i++){
+//					cv::line(im_g_vis, pt_o, hit_pts[i], Scalar(0, 0, 255), 2);
+//				}
+//
+//				Eigen::Vector3d st_pt;
+//				st_pt << 0, 0, 0;
+//				for(int i = 0; i < dense_ground_3d_pts.size(); i++){
+//					Eigen::Vector3d end_pt = dense_ground_3d_pts[i];
+//					rv::draw_line_lcmgl(lcmgl_haptic, st_pt, end_pt);
+//				}
+//			}
+
+			// draw lines according to ranges_m
+			cv::Point pt_o = cv::Point(im_g.cols / 2, im_g.rows);
+			Eigen::Vector3d st_pt;
+			st_pt << 0, 0, 0;
+			for(int i = 0; i < ranges_m.size(); i++){
+				float r = ranges_m[i];
+				float r_px = r / 6 * 300;
+
+				float theta = (115.0 - (float)i * 13.0) / 180.0 * M_PI;
+				float px_x = r_px * cos(theta);
+				float px_y = r_px * sin(theta);
+
+				cv::Point pt_r = cv::Point(pt_o.x + px_x, pt_o.y - px_y);
+				cv::line(im_g_vis, pt_o, pt_r, Scalar(0, 0, 255), 2);
+				//cout << r_px << ", " << px_x << ", " << px_y << endl;
+
+				// draw 3d
+				float theta3d = (-90 + 115.0 - (float)i * 13.0) / 180.0 * M_PI;
+				float r_x = r * cos(theta3d);
+				float r_y = r * sin(theta3d);
+
+				Eigen::Vector3d end_pt;
+				end_pt << r_x, r_y, 0;
+				rv::draw_line_lcmgl(lcmgl_haptic, st_pt, end_pt);
+
+			}
+
+			// draw tile
+			float tile_size = 0.6;
+			Eigen::Matrix4d draw_tile_pose = trans_mx;
+			for(int i = 0; i < 5; i++){
+
+				rv::draw_tile_lcmgl(lcmgl_, draw_tile_pose, tile_size);
+
+				Eigen::Matrix4d T_tl;
+				T_tl << 1, 0, 0, tile_size,
+						0, 1, 0, 0,
+						0, 0, 1, 0,
+						0, 0, 0, 1;
+				draw_tile_pose *= T_tl;
+			}
+
+			rv::draw_brid_view_range_lcmgl(lcmgl_, trans_mx);
+
+		}else if(this->haptic_array_mode == 3){
+
+			for(int i = 0; i < im_g.cols; i++){
+				for(int j = 0; j < im_g.rows; j++){
+					if(im_g.at<uchar>(j, i) == 255){
+						im_g_vis.at<Vec3b>(j, i)[1] = 255; // Green: ground plane
+					}else if(im_g.at<uchar>(j, i) == 2){
+						im_g_vis.at<Vec3b>(j, i)[1] = 255; // knee height
+						im_g_vis.at<Vec3b>(j, i)[2] = 255; // sky blue
+					}else if(im_g.at<uchar>(j, i) == 3){
+						im_g_vis.at<Vec3b>(j, i)[0] = 255; // waist height
+						im_g_vis.at<Vec3b>(j, i)[1] = 255; // yellow
+					}else if(im_g.at<uchar>(j, i) == 1){
+						im_g_vis.at<Vec3b>(j, i)[0] = 255; // red: obstacle
+					}
+				}
+			}
+
+			rv::draw_brid_view_range_lcmgl(lcmgl_, trans_mx);
+		}
+
+		cv_bridge->publish_mjpg(im_g_vis, (char*)"IMAGE_GRID");
+
+		// downsample
+		cv::pyrDown(im_g_vis, im_g_tiny, Size(im_g_tiny.cols, im_g_tiny.rows));
+		cv::cvtColor(im_g_tiny, im_g_tiny, CV_RGB2BGR);
+		cv_bridge->publish_mjpg(im_g_tiny, (char*)"IMAGE_GRID_TINY");
+
+
+		/////////////////////////////////////////////////////////////
+		// * 3D Viewer
+		/////////////////////////////////////////////////////////////
+
+		// draw spotlight
+		Eigen::Matrix4d trans_spotlight = trans_mx_init * trans_mx;
+		// ignore translation in trans_mx
+		trans_spotlight(0, 3) = 0.1;
+		trans_spotlight(1, 3) = 0;
+
+		rv::draw_pose_spotlight_lcmgl(lcmgl_spotlight, trans_spotlight,
+				(float)this->h_fov, (float)this->v_fov);
+
+
+		// draw cloud
+		rv::draw_cloud_ptr_lcmgl(lcmgl_, cloud, im_m);
+
+		/////////////////////////////////////////////////////////////
+		// draw haptic array
+
+		bot_lcmgl_switch_buffer(lcmgl_);
+		bot_lcmgl_switch_buffer(lcmgl_spotlight);
+		bot_lcmgl_switch_buffer(lcmgl_haptic);
+
+		// clean up
+		free(rgb_buf_);
+		free(depth_img);
+
+	}*/
+
+}
+
+void blKinectFramePCL::on_kinect_frame_aux(const lcm_recv_buf_t* rbuf,
+		const char* channel,
+		const kinect_frame_msg_t* msg,
+		void* user_data) {
+	(static_cast<blKinectFramePCL *>(user_data))->on_frame(msg);
+}
+
+
+//////////////////////////////////////
+// MAIN
+//////////////////////////////////////
+
+blKinectFramePCL* kf_pcl;
+
+void termination_handler(int signum)
+{
+	finish_ = true;
+}
+
+void setup_signal_handlers(void (*handler)(int))
+{
+	struct sigaction new_action, old_action;
+	memset(&new_action, 0, sizeof(new_action));
+	new_action.sa_handler = handler;
+	sigemptyset(&new_action.sa_mask);
+
+	// Set termination handlers and preserve ignore flag.
+	sigaction(SIGINT, NULL, &old_action);
+	if (old_action.sa_handler != SIG_IGN)
+		sigaction(SIGINT, &new_action, NULL);
+	sigaction(SIGHUP, NULL, &old_action);
+	if (old_action.sa_handler != SIG_IGN)
+		sigaction(SIGHUP, &new_action, NULL);
+	sigaction(SIGTERM, NULL, &old_action);
+	if (old_action.sa_handler != SIG_IGN)
+		sigaction(SIGTERM, &new_action, NULL);
+}
+
+static void
+usage(const char *name)
+{
+	fprintf(
+			stderr,
+			"usage: %s [options]\n"
+			"\n"
+			"  -h, --help                            Shows this help text and exits\n"
+			"  -s, --show-spotlight                  show spotlight, default: 1\n"
+			"  -p, --pitch                           add pitch (degree), default: 10\n"
+			"  -z, --z-height                        add height (meter), default: 1.0\n"
+			"  -g, --adjust-ground-height            adjust ground height, 0: always, > 0: N seconds\n"
+			"  -f, --h-fov                           horizontal fov (degree), default: 60\n"
+			"  -v, --v-fov                           vertical fov (meter), default: 40\n"
+			"  -d, --decimate                        decimate, default: 2\n"
+			"  -r, --rotated                         rotated\n"
+			"  -a, --haptic-array                    Haptic Array Mode. 1: range, 2: height\n"
+			"  -j, --haptic-just-notice              Haptic just notice\n"
+			"  -m, --haptic-min-range                Haptic min range\n"
+			"  -x, --haptic-max-range                Haptic max range\n"
+			"  -b, --haptic-vibration-pattern        Haptic vibration pattern\n"
+			"  -c, --braille-display-mode            Braille display mode\n"
+			"  -n, --motor-num                       Number of Vibration Motor. default: 5\n"
+			"  -e, --patch-density                   haptic point check. default: 0.3\n"
+			"  -l, --lcmgl                           publish lcmgl. default: 0\n"
+			"\n",
+			name);
+
+	exit(1);
+}
+
+int main(int argc, char** argv)
+{
+	finish_ = false;
+	int publish_lcmgl = 0;
+
+	float pitch = 30;
+	float height = 1.0;
+	int h_fov = 60;
+	int v_fov = 40;
+	int decimate = 4.0;
+	int is_rotated = 0;
+
+	int adjust_ground_height_time = 5;
+
+	int haptic_array_mode = 2;
+	int haptic_motor_num = 5;
+	float patch_density = 0.3;
+
+	char* haptic_just_notice = (char*)"33333";
+	float haptic_min_range = 1.0;
+	float haptic_max_range = 2.4;
+	int haptic_vibration_pattern = 1;
+
+	int braille_display_mode = 2;
+	
+	const char *optstring = "hs:p:z:f:v:d:a:n:l:e:r:j:m:x:b:c:g:";
+	int c;
+	struct option long_opts[] =
+	{
+			{ "help", no_argument, 0, 'h' },
+			{ "show-spotlight", required_argument, 0, 's' },
+			{ "pitch", required_argument, 0, 'p' },
+			{ "z-height", required_argument, 0, 'z' },
+			{ "adjust-ground-height", required_argument, 0, 'g' },
+			{ "h-fov", required_argument, 0, 'f' },
+			{ "v-fov", required_argument, 0, 'v' },
+			{ "rotated", required_argument, 0, 'r' },
+			{ "decimate", required_argument, 0, 'd' },
+			{ "haptic-array", required_argument, 0, 'a' },
+			{ "haptic-num", required_argument, 0, 'n' },
+			{ "publish-lcmgl", required_argument, 0, 'l' },
+			{ "patch-density", required_argument, 0, 'e' },
+			{ "haptic-just-notice", required_argument, 0, 'j' },
+			{ "haptic-min-range", required_argument, 0, 'm' },
+			{ "haptic-max-range", required_argument, 0, 'x' },
+			{ "haptic-vibration-pattern", required_argument, 0, 'b' },
+			{ "braille-display-mode", required_argument, 0, 'c' },
+			{ 0, 0, 0, 0 }
+	};
+
+	while ((c = getopt_long(argc, argv, optstring, long_opts, 0)) >= 0) {
+		switch (c){
+		case 'p':
+			pitch = atof(optarg);
+			break;
+		case 'z':
+			height = atof(optarg);
+			break;
+		case 'f':
+			h_fov = atoi(optarg);
+			break;
+		case 'g':
+			adjust_ground_height_time = atoi(optarg);
+			break;
+		case 'v':
+			v_fov = atoi(optarg);
+			break;
+		case 'd':
+			decimate = atoi(optarg);
+			break;
+		case 'r':
+			is_rotated = atoi(optarg);
+			break;
+		case 'a':
+			haptic_array_mode = atoi(optarg);
+			break;
+		case 'n':
+			haptic_motor_num = atoi(optarg);
+			break;
+		case 'l':
+			publish_lcmgl = atoi(optarg);
+			break;
+		case 'e':
+			patch_density = atof(optarg);
+			break;
+		case 'j':
+			haptic_just_notice = optarg;
+			break;
+		case 'm':
+			haptic_min_range = atof(optarg);
+			break;
+		case 'x':
+			haptic_max_range = atof(optarg);
+			break;
+		case 'b':
+			haptic_vibration_pattern = atoi(optarg);
+			break;
+		case 'c':
+			braille_display_mode = atoi(optarg);
+			break;
+		case 'h':
+			usage(argv[0]);
+			break;
+		}
+	}
+
+	// "udpm://239.255.76.67:7667?ttl=1"
+	lcm_t* lcm = lcm_create(NULL);
+
+	kf_pcl = new blKinectFramePCL(lcm);
+	kf_pcl->set_pitch(pitch);
+	kf_pcl->set_height(height);
+	kf_pcl->set_fov(h_fov, v_fov);
+	kf_pcl->set_decimate(decimate);
+	kf_pcl->set_haptic_array_mode(haptic_array_mode);
+	kf_pcl->set_motor_num(haptic_motor_num);
+	kf_pcl->set_publish_lcmgl(publish_lcmgl);
+	kf_pcl->set_patch_density(patch_density);
+	kf_pcl->set_rotated(is_rotated);
+	kf_pcl->set_haptic_settings(haptic_min_range, haptic_max_range,
+			haptic_just_notice, haptic_vibration_pattern);
+	kf_pcl->set_adjust_ground_height_time(adjust_ground_height_time);
+	kf_pcl->set_braille_display_mode(braille_display_mode);
+
+	setup_signal_handlers(termination_handler);
+	while(0 == lcm_handle(lcm) && finish_ == false) ;
+
+	delete kf_pcl;
+
+    printf("Dosvedanya!\n");
+    return 0;
+}
+
+

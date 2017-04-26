@@ -1,0 +1,4 @@
+/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/CMakeFiles/aind6uTmiBUbLUEZfIrau0kFFVW53DKt.dir
+/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/CMakeFiles/rv-kinect-frame-pcl-kobe-demo.dir
+/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/CMakeFiles/rv-kinect-frame-pcl-utils.dir
+/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/CMakeFiles/rv-vis.dir

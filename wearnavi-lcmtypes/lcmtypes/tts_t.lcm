@@ -1,0 +1,6 @@
+package obstacle;
+
+struct tts_t
+{
+    string data;
+}

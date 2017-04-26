@@ -1,0 +1,2 @@
+/usr/bin/ar cr lib/liblcmtypes_wearnavi.a  CMakeFiles/lcmtypes_wearnavi.dir/lcmtypes/c/lcmtypes/obstacle_tts_t.c.o CMakeFiles/lcmtypes_wearnavi.dir/lcmtypes/c/lcmtypes/obstacle_haptic_array_t.c.o
+/usr/bin/ranlib lib/liblcmtypes_wearnavi.a

@@ -1,0 +1,11 @@
+prefix=/home/robotvision/code/build
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: lcmtypes_kinect
+Description: LCM types for kinect
+Requires:  lcm
+Version: 0.0.0
+Libs: -L${libdir}  -llcmtypes_kinect
+Cflags: -I${includedir} 

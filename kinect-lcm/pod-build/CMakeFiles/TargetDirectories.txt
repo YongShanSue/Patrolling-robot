@@ -1,0 +1,12 @@
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/fsaPUuseCW9IQxAoRQ4u2S3RIEGNOGjC.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/src/kinect-glview/CMakeFiles/kinect-glview.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/src/kinect-utils/CMakeFiles/kinect-pc.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/src/kinect-renderer/CMakeFiles/kinect-renderer.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/src/kinect-utils/CMakeFiles/kinect-utils.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/src/kinect-renderer/CMakeFiles/kinect-viewer.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmgen_c.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmgen_cpp.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmgen_java.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmgen_python.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmtypes_kinect.dir
+/home/robotvision/code/assistive-robotics-repo/kinect-lcm/pod-build/CMakeFiles/lcmtypes_kinect_jar.dir

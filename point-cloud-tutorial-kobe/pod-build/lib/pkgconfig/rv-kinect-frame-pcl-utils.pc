@@ -1,0 +1,11 @@
+prefix=/home/robotvision/code/build
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: rv-kinect-frame-pcl-utils
+Description: rv-kinect-frame-pcl-utils
+Requires:  lcm eigen3
+Version: 0.0.1
+Libs: -L${libdir}  -lkinect-frame-pcl-utils
+Cflags: -I${includedir} 

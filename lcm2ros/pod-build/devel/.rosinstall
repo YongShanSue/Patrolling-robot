@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/robotvision/code/patrollingrobot_kobe/lcm2ros/pod-build/devel/setup.sh

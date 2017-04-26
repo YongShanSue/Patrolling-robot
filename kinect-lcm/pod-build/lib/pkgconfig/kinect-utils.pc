@@ -1,0 +1,11 @@
+prefix=/home/robotvision/code/build
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: kinect-utils
+Description: kinect-utils
+Requires: 
+Version: 0.0.1
+Libs: -L${libdir}  -lkinect-utils
+Cflags: -I${includedir} 

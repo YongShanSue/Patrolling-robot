@@ -1,0 +1,6 @@
+package kinect;
+
+struct projected_point2d_t {
+    float u;
+    float v;
+}
