@@ -3,4 +3,5 @@
 /home/robotvision/code/build/include/kinect/rv-kinect-frame-pcl-utils.h
 /home/robotvision/code/build/lib/pkgconfig/rv-kinect-frame-pcl-utils.pc
 /home/robotvision/code/build/bin/rv-kinect-frame-pcl-kobe-demo
+/home/robotvision/code/build/bin/rv-asus-viewer
 /home/robotvision/code/build/bin/rv-vis

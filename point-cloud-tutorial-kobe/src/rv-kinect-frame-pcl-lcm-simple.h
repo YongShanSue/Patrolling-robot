@@ -142,6 +142,7 @@ private:
 	bot_lcmgl_t* lcmgl_v;
 	bot_lcmgl_t* lcmgl_h;
 	bot_lcmgl_t* lcmgl_pointcloud;
+	bot_lcmgl_t* lcmgl_viewer;
 	kinect_segmentlist_t* segment =new kinect_segmentlist_t();
 };
 

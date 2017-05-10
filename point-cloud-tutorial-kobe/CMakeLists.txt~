@@ -14,7 +14,7 @@ add_definitions(${PCL_DEFINITIONS})
 find_package(OpenCV)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-find_package(Boost COMPONENTS filesystem REQUIRED)
+#find_package(Boost COMPONENTS filesystem REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 set (CONFIG_PACKAGES     
@@ -28,7 +28,7 @@ set (CONFIG_PACKAGES
 
 set (LINK_LIBS
     ${Boost_FILESYSTEM_LIBRARY} boost_system boost_filesystem
-    ${PCL_COMMON_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_FEATURES_LIBRARIES}  ${PCL_VISUALIZATION_LIBRARIES} ${PCL_LIBRARIES}
+    ${PCL_COMMON_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEGMENTATION_LIBRARIES} ${PCL_VISUALIZATION_LIBRARIES} ${PCL_LIBRARIES}
     bot2-core lcmtypes_kinect lcmtypes_wearnavi lcmtypes_bot2-core
     kinect-utils z jpeg-utils bot2-core
     ) 
@@ -53,6 +53,16 @@ target_link_libraries(rv-kinect-frame-pcl-kobe-demo
     ${LINK_LIBS} ${OpenCV_LIBS} 
     rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
 pods_install_executables(rv-kinect-frame-pcl-kobe-demo)
+# Asus Xtion vis
+add_executable(rv-asus-viewer
+    src/rv-asus-viewer.cpp 
+    src/rv-cv-pcl-utils.cpp
+    src/haptic-array-generator.cpp)
+pods_use_pkg_config_packages(rv-asus-viewer lcm eigen3 bot2-lcmgl-client)    
+target_link_libraries(rv-asus-viewer
+    ${LINK_LIBS} ${OpenCV_LIBS} 
+    rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
+pods_install_executables(rv-asus-viewer)
 
 # vis
 add_executable(rv-vis

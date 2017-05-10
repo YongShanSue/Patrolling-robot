@@ -138,7 +138,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
     
     gettimeofday(&start,NULL);
     duration=(start.tv_sec-stop.tv_sec)+(start.tv_usec-stop.tv_usec)/1000000.0;
-	printf("Waiting Time:\t%lf",duration);
+	printf("Waiting Time:\t%lf\t",duration);
 	///////////////////////////////////////
 	// 1. Input Pre-processing
 	// Input: msg
@@ -172,9 +172,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
     		
 		  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZRGB>);
 		  pcl::ConditionAnd<pcl::PointXYZRGB>::Ptr range_cond   (new  pcl::ConditionAnd<pcl::PointXYZRGB> ());
-  		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, -1.0)));//-1.3
-		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, -0.3)));//-0.3
-		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::GT, 2.2)));
+  		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, -1.3)));		//-1.3
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, -0.7)));		//-0.3
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::GT, 0.1)));			//zed = 2.2
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::LT, 6.0)));			//zed = 2.2
 		  // build the filter
 		  pcl::ConditionalRemoval<pcl::PointXYZRGB> condrem1 (range_cond);
 		  condrem1.setInputCloud (cloud_raw);
@@ -214,13 +215,13 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  // calculate normals with the small scale
 		  pcl::PointCloud <pcl::PointNormal>::Ptr normals_small_scale (new pcl::PointCloud<pcl::PointNormal>);
 
-		  ne1.setRadiusSearch (0.05);
+		  ne1.setRadiusSearch (0.2);			//zed = 0.05
 		  ne1.compute (*normals_small_scale);
 			
 		  // calculate normals with the large scale
 		  pcl::PointCloud<pcl::PointNormal>::Ptr normals_large_scale (new pcl::PointCloud<pcl::PointNormal>);
 
-		  ne1.setRadiusSearch (0.15);
+		  ne1.setRadiusSearch (0.4);			//zed = 0.14
 		  ne1.compute (*normals_large_scale);
 			//printf("big_size=%d\n",normals_large_scale->points.size());
 		  // Create output cloud for DoN results
@@ -243,9 +244,9 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_right=doncloud;
 		  // Build the condition for filtering			filter the left road
 		  pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond_left (new pcl::ConditionAnd<pcl::PointNormal> () );
-		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.2)));//0.2 
-		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::GT, -0.9)));
-		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::LT, -0.7)));
+		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.4)));	//zed=0.2 
+		  //range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::GT, -0.9)));
+		  //range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::LT, -0.7)));
 		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("y", pcl::ComparisonOps::GT, 0)));
 		  // Build the filter
 		  pcl::ConditionalRemoval<pcl::PointNormal> condrem_left (range_cond_left);
@@ -263,9 +264,9 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 		  // Build the condition for filtering			filter the right road
 		  pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond_right (new pcl::ConditionAnd<pcl::PointNormal> () );
-		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.2)));//0.2 
-		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::GT, -0.9)));
-		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::LT, -0.7)));
+		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.1)));//0.2 
+		  //range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::GT, -0.9)));
+		  //range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::LT, -0.7)));
 		   range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("y", pcl::ComparisonOps::LT, 0)));
 		  // Build the filter
 		  pcl::ConditionalRemoval<pcl::PointNormal> condrem_right (range_cond_right);
@@ -286,10 +287,12 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 		   ///////////////////////Resize left point cloud size/////////////
 		   for(int i=0;i<doncloud_left->points.size();i++){
-		   	if(doncloud_left->points[i].x<100 ){
+		   	if(doncloud_left->points[i].x<6 ){
 		   		doncloud1_left->points[count_left].x = doncloud_left->points[i].x;
 		   		doncloud1_left->points[count_left].y = doncloud_left->points[i].y;
 		   		doncloud1_left->points[count_left].z = doncloud_left->points[i].z;
+		   		doncloud1_left->points[count_left].r = doncloud->points[i].curvature*255;
+
 		   		count_left++;
 		   	}
 		   }
@@ -316,25 +319,27 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			    extract.filter (*finalreg_left);
 			    // printf("finalregsize=%d\n",finalreg_left->points.size ());
 				for(int i=0;i<finalreg_left->points.size ();i++){
-						
 						bot_lcmgl_color3f(lcmgl_pointcloud, 1, 0, 0);
+						//bot_lcmgl_color3f(lcmgl_pointcloud, doncloud1_left->points[i].r/255.0, 0, 0);
+						//printf("Color:\t%f\n",doncloud1_left->points[i].r/255.0);
 		    			bot_lcmgl_vertex3f(lcmgl_pointcloud, finalreg_left->points[i].x,finalreg_left->points[i].y, finalreg_left->points[i].z);	    
 			  	}
 			  	
 		  
 			}
-			
+		
 
 
 		   ///////////////////////Resize right point cloud size/////////////
 		    int count_right=0;
 		    doncloud1_right->points.resize(19200);
 		    for(int i=0;i<doncloud_right->points.size();i++){
-			   	if(doncloud_right->points[i].x<100 ){
+			   	if(doncloud_right->points[i].x<6 ){
 			   		//printf("x= %f\n",doncloud->points[i].x);
 			   		doncloud1_right->points[count_right].x = doncloud_right->points[i].x;
 			   		doncloud1_right->points[count_right].y = doncloud_right->points[i].y;
 			   		doncloud1_right->points[count_right].z = doncloud_right->points[i].z;
+			   		doncloud1_right->points[count_right].g = doncloud->points[i].curvature*255;
 			   		count_right++;
 			   	}
 		    }
@@ -359,8 +364,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			    extract_right.filter (*finalreg_right);
 			    // printf("finalregsize=%d\n",finalreg_right->points.size ());
 				for(int i=0;i<finalreg_right->points.size ();i++){
-						
-						bot_lcmgl_color3f(lcmgl_pointcloud, 0, 1, 0);
+						bot_lcmgl_color3f(lcmgl_pointcloud, 0,  1, 0);
+						//bot_lcmgl_color3f(lcmgl_pointcloud, 0,  doncloud1_right->points[i].g/255.0, 0);
 		    			bot_lcmgl_vertex3f(lcmgl_pointcloud, finalreg_right->points[i].x,finalreg_right->points[i].y, finalreg_right->points[i].z);	    
 			  	}
 			  
@@ -402,7 +407,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			  
 			   start_pt_right << line_right.values[0],line_right.values[1],line_right.values[2];
 			   stop_pt_right << line_right.values[0]+4*line_right.values[3],line_right.values[1]+4*line_right.values[4],line_right.values[2]+4*line_right.values[5];
-			    rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_right, stop_pt_right);
+			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_right, stop_pt_right);
 			   //printf("Line test:\t%f\t%f\t%f\n",line_right.values[0],line_right.values[1],line_right.values[2]);
 			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_right, stop_pt_right);
 			   this->segment->right_normalized_line[0].u=line_right.values[0];

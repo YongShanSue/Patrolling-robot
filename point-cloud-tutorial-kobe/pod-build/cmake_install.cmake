@@ -1,4 +1,4 @@
-# Install script for directory: /home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe
+# Install script for directory: /home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe
 
 # Set the install prefix
 IF(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,8 +45,8 @@ IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspeci
     ENDIF()
   ENDFOREACH()
   FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib" TYPE SHARED_LIBRARY FILES
-    "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib/librv-kinect-frame-pcl-utils.so.1"
-    "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib/librv-kinect-frame-pcl-utils.so"
+    "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib/librv-kinect-frame-pcl-utils.so.1"
+    "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib/librv-kinect-frame-pcl-utils.so"
     )
   FOREACH(file
       "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/librv-kinect-frame-pcl-utils.so.1"
@@ -56,7 +56,7 @@ IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspeci
        NOT IS_SYMLINK "${file}")
       FILE(RPATH_CHANGE
            FILE "${file}"
-           OLD_RPATH "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
+           OLD_RPATH "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
            NEW_RPATH "/home/robotvision/code/build/lib")
       IF(CMAKE_INSTALL_DO_STRIP)
         EXECUTE_PROCESS(COMMAND "/usr/bin/strip" "${file}")
@@ -66,11 +66,11 @@ IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspeci
 ENDIF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
 
 IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
-  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/kinect" TYPE FILE FILES "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/src/rv-kinect-frame-pcl-utils.h")
+  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/kinect" TYPE FILE FILES "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/src/rv-kinect-frame-pcl-utils.h")
 ENDIF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
 
 IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
-  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib/pkgconfig/rv-kinect-frame-pcl-utils.pc")
+  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib/pkgconfig/rv-kinect-frame-pcl-utils.pc")
 ENDIF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
 
 IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
@@ -80,15 +80,35 @@ IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspeci
          FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-kinect-frame-pcl-kobe-demo"
          RPATH "/home/robotvision/code/build/lib")
   ENDIF()
-  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE EXECUTABLE FILES "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/bin/rv-kinect-frame-pcl-kobe-demo")
+  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE EXECUTABLE FILES "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/bin/rv-kinect-frame-pcl-kobe-demo")
   IF(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-kinect-frame-pcl-kobe-demo" AND
      NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-kinect-frame-pcl-kobe-demo")
     FILE(RPATH_CHANGE
          FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-kinect-frame-pcl-kobe-demo"
-         OLD_RPATH "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
+         OLD_RPATH "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
          NEW_RPATH "/home/robotvision/code/build/lib")
     IF(CMAKE_INSTALL_DO_STRIP)
       EXECUTE_PROCESS(COMMAND "/usr/bin/strip" "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-kinect-frame-pcl-kobe-demo")
+    ENDIF(CMAKE_INSTALL_DO_STRIP)
+  ENDIF()
+ENDIF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
+
+IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
+  IF(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer" AND
+     NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer")
+    FILE(RPATH_CHECK
+         FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer"
+         RPATH "/home/robotvision/code/build/lib")
+  ENDIF()
+  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE EXECUTABLE FILES "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/bin/rv-asus-viewer")
+  IF(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer" AND
+     NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer")
+    FILE(RPATH_CHANGE
+         FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer"
+         OLD_RPATH "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
+         NEW_RPATH "/home/robotvision/code/build/lib")
+    IF(CMAKE_INSTALL_DO_STRIP)
+      EXECUTE_PROCESS(COMMAND "/usr/bin/strip" "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-asus-viewer")
     ENDIF(CMAKE_INSTALL_DO_STRIP)
   ENDIF()
 ENDIF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspecified")
@@ -100,12 +120,12 @@ IF(NOT CMAKE_INSTALL_COMPONENT OR "${CMAKE_INSTALL_COMPONENT}" STREQUAL "Unspeci
          FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-vis"
          RPATH "/home/robotvision/code/build/lib")
   ENDIF()
-  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE EXECUTABLE FILES "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/bin/rv-vis")
+  FILE(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE EXECUTABLE FILES "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/bin/rv-vis")
   IF(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-vis" AND
      NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-vis")
     FILE(RPATH_CHANGE
          FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-vis"
-         OLD_RPATH "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
+         OLD_RPATH "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/lib:/home/robotvision/code/build/lib:"
          NEW_RPATH "/home/robotvision/code/build/lib")
     IF(CMAKE_INSTALL_DO_STRIP)
       EXECUTE_PROCESS(COMMAND "/usr/bin/strip" "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/bin/rv-vis")
@@ -119,7 +139,7 @@ ELSE(CMAKE_INSTALL_COMPONENT)
   SET(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
 ENDIF(CMAKE_INSTALL_COMPONENT)
 
-FILE(WRITE "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/${CMAKE_INSTALL_MANIFEST}" "")
+FILE(WRITE "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/${CMAKE_INSTALL_MANIFEST}" "")
 FOREACH(file ${CMAKE_INSTALL_MANIFEST_FILES})
-  FILE(APPEND "/home/robotvision/code/patrollingrobot_kobe/point-cloud-tutorial-kobe/pod-build/${CMAKE_INSTALL_MANIFEST}" "${file}\n")
+  FILE(APPEND "/home/robotvision/code/Patrolling-robot/point-cloud-tutorial-kobe/pod-build/${CMAKE_INSTALL_MANIFEST}" "${file}\n")
 ENDFOREACH(file)

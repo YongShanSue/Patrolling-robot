@@ -669,6 +669,8 @@ void unpack_kinect_frame(const kinect_frame_msg_t *msg, uint8_t* rgb_data,
 				uint8_t r = rgb_data[v*msg->depth.width*3 + u*3 + 0];
 				uint8_t g = rgb_data[v*msg->depth.width*3 + u*3 + 1];
 				uint8_t b = rgb_data[v*msg->depth.width*3 + u*3 + 2];
+				
+
 				double constant = 1.0f / kcal->intrinsics_rgb.fx ;
 				double disparity_d = val[v*msg->depth.width+u]  / 1000.0; // convert to m
 				cloud->points[j2].y =  - (((double) u)- 319.50)*disparity_d*constant; //y right+ (check)
