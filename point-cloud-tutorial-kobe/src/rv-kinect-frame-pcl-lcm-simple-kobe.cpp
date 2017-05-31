@@ -172,8 +172,9 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
     		
 		  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZRGB>);
 		  pcl::ConditionAnd<pcl::PointXYZRGB>::Ptr range_cond   (new  pcl::ConditionAnd<pcl::PointXYZRGB> ());
-  		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, -1.3)));		//-1.3
-		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, -0.7)));		//-0.3
+  		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, -1)));		//-1.3
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, -0.5)));		//-0.3
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("y", pcl::ComparisonOps::LT, 8)));		//-0.3
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::GT, 0.1)));			//zed = 2.2
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::LT, 6.0)));			//zed = 2.2
 		  // build the filter
@@ -215,7 +216,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  // calculate normals with the small scale
 		  pcl::PointCloud <pcl::PointNormal>::Ptr normals_small_scale (new pcl::PointCloud<pcl::PointNormal>);
 
-		  ne1.setRadiusSearch (0.2);			//zed = 0.05
+		  ne1.setRadiusSearch (0.1);			//zed = 0.05
 		  ne1.compute (*normals_small_scale);
 			
 		  // calculate normals with the large scale
@@ -242,6 +243,43 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_left=doncloud;
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_right=doncloud;
+		  /*
+		  double curpercent[10];
+		  double curvatur_hit[10];
+		  for(int i=0;i<10;i++)
+		  	curvatur_hit[i]=0;
+		  for(int i=0;i<19200;i++){
+		  	printf("%g\n",doncloud->points[i].curvature);
+		  	//doncloud->points[i].curvature = doncloud->points[i].curvature*10;
+		  	if( doncloud->points[i].curvature <0.1 && doncloud->points[i].curvature>=0)
+		  		curvatur_hit[0]++;
+		 	else if( doncloud->points[i].curvature <0.2 && doncloud->points[i].curvature>0.1)
+		  		curvatur_hit[1]++; 	
+		  	else if( doncloud->points[i].curvature <0.3 && doncloud->points[i].curvature>0.2)
+		  		curvatur_hit[2]++; 
+		  	else if( doncloud->points[i].curvature <0.4 && doncloud->points[i].curvature>0.3)
+		  		curvatur_hit[3]++; 
+		  	else if( doncloud->points[i].curvature <0.5 && doncloud->points[i].curvature>0.4)
+		  		curvatur_hit[4]++; 	
+		  	else if(doncloud->points[i].curvature <0.6 && doncloud->points[i].curvature>0.5)
+		  		curvatur_hit[5]++; 
+		  	else if( doncloud->points[i].curvature <0.7 && doncloud->points[i].curvature>0.6)
+		  		curvatur_hit[6]++; 
+		  	else if( doncloud->points[i].curvature <0.8 && doncloud->points[i].curvature>0.7)
+		  		curvatur_hit[7]++; 	
+		  	else if( doncloud->points[i].curvature <0.9 && doncloud->points[i].curvature>0.8)
+		  		curvatur_hit[8]++; 
+		  	else if( doncloud->points[i].curvature <1.0 && doncloud->points[i].curvature>0.9)
+		  		curvatur_hit[9]++; 
+
+		  }
+
+		  for(int i=0;i<10;i++){
+		  		curpercent[i]=curvatur_hit[i]/19200;
+		  		printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
+		  }
+		  */
+
 		  // Build the condition for filtering			filter the left road
 		  pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond_left (new pcl::ConditionAnd<pcl::PointNormal> () );
 		  range_cond_left->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.4)));	//zed=0.2 
@@ -264,7 +302,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 		  // Build the condition for filtering			filter the right road
 		  pcl::ConditionAnd<pcl::PointNormal>::Ptr range_cond_right (new pcl::ConditionAnd<pcl::PointNormal> () );
-		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.1)));//0.2 
+		  range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("curvature", pcl::ComparisonOps::GT, 0.3)));//0.2 
 		  //range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::GT, -0.9)));
 		  //range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("z", pcl::ComparisonOps::LT, -0.7)));
 		   range_cond_right->addComparison (pcl::FieldComparison<pcl::PointNormal>::ConstPtr (new pcl::FieldComparison<pcl::PointNormal> ("y", pcl::ComparisonOps::LT, 0)));
@@ -296,7 +334,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		   		count_left++;
 		   	}
 		   }
-		   //printf("CountLeftsize=%d\n",count_left);
+		   printf("CountLeftsize=%d\n",count_left);
 		   doncloud1_left->points.resize(count_left);
 		   ////////////////Line ransac Left//////////////////
 		  		pcl::ModelCoefficients line; 
@@ -343,7 +381,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			   		count_right++;
 			   	}
 		    }
-		    //printf("CountRightsize=%d\n",count_right);
+		    printf("CountRightsize=%d\n",count_right);
 		    doncloud1_right->points.resize(count_right);
 		    	pcl::ModelCoefficients line_right; 
 				pcl::PointIndices::Ptr inliers_right(new pcl::PointIndices); 
@@ -395,9 +433,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 			   this->segment->left_normalized_line[0].u=(line.values[0]);
 
-		    this->segment->left_normalized_line[0].v=line.values[1];
-		    this->segment->left_normalized_line[1].u=line.values[0]+line.values[3];
-		    this->segment->left_normalized_line[1].v=line.values[1]+line.values[4];
+		    	this->segment->left_normalized_line[0].v=line.values[1];
+		    	this->segment->left_normalized_line[1].u=line.values[0]+line.values[3];
+		    	this->segment->left_normalized_line[1].v=line.values[1]+line.values[4];
+		    	printf("Vector left\t%lf\t%lf\n",line.values[3],line.values[4]);
 			}
 			if(count_right>=2){ 
 			   Eigen::Vector3d start_pt_right;
@@ -414,6 +453,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		    this->segment->right_normalized_line[0].v=line_right.values[1];
 		    this->segment->right_normalized_line[1].u=line_right.values[0]+line_right.values[3];
 		    this->segment->right_normalized_line[1].v=line_right.values[1]+line_right.values[4];
+		    printf("Vector right\t%lf\t%lf\n",line_right.values[3],line_right.values[4]);
 		   // printf("distance:%lf\n",sqrt(line_right.values[3]*line_right.values[3]+line_right.values[4]*line_right.values[4]));
 
 		    }
