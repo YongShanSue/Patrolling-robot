@@ -6,21 +6,21 @@
 #include <lcm/lcm-cpp.hpp>
 
 #include "lcmtypes/bot_core/pose_t.hpp"
-#include "lcmtypes/april_tags/caffe_class_t.hpp"
-#include "lcmtypes/april_tags/caffe_class_array_t.hpp"
-#include "lcmtypes/april_tags/quad_proposal_t.hpp"
-#include <lcmtypes/april_tags/tessocr_string_t.hpp>
+//#include "lcmtypes/april_tags/caffe_class_t.hpp"
+//#include "lcmtypes/april_tags/caffe_class_array_t.hpp"
+//#include "lcmtypes/april_tags/quad_proposal_t.hpp"
+//#include <lcmtypes/april_tags/tessocr_string_t.hpp>
 #include <lcmtypes/kinect/segmentlist_t.hpp>
 
 
-#include <nav_msgs/Odometry.h>
+//#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Float64.h>
-#include <map>
+//#include <map>
 
-#include <duckietown_msgs/Twist2DStamped.h>
+//#include <duckietown_msgs/Twist2DStamped.h>
 #include <duckietown_msgs/BoolStamped.h>
 #include <duckietown_msgs/Rect.h>
 #include <duckietown_msgs/SegmentList.h>
@@ -64,7 +64,7 @@ LCM2ROS::LCM2ROS(boost::shared_ptr<lcm::LCM> &lcm_, ros::NodeHandle &nh_, std::s
 	lcm_->subscribe("Segmentlist", &LCM2ROS::segmentlistHandler, this);
 
 
-	topic_pub_carcmd << "/" << veh_ << "/L2R_Segment";
+	topic_pub_carcmd <<  "/wearnavi/L2R_Segment";
 	pub_segment= nh_.advertise<duckietown_msgs::SegmentList>(topic_pub_carcmd.str(),10); 
 
 
@@ -79,15 +79,20 @@ void LCM2ROS::segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::stri
 	duckietown_msgs::Segment left_segment_msg ;
 	duckietown_msgs::Segment right_segment_msg ;
 	left_segment_msg.color=left_segment_msg.YELLOW;
-	left_segment_msg.pixels_normalized[0].x=msg->left_normalized_line[0].u;
-	left_segment_msg.pixels_normalized[0].y=msg->left_normalized_line[0].v;
-	left_segment_msg.pixels_normalized[1].x=msg->left_normalized_line[1].u;
-	left_segment_msg.pixels_normalized[1].y=msg->left_normalized_line[1].v;
+	left_segment_msg.pixels_normalized[0].y=msg->left_normalized_line[0].u;
+	left_segment_msg.pixels_normalized[0].x=msg->left_normalized_line[0].v*-1.0;
+	left_segment_msg.pixels_normalized[1].y=msg->left_normalized_line[1].u;
+	left_segment_msg.pixels_normalized[1].x=msg->left_normalized_line[1].v*-1.0;
+	left_segment_msg.normal.x= ( msg->left_normalized_line[1].u - msg->left_normalized_line[0].u) ;
+	left_segment_msg.normal.y=  ( msg->left_normalized_line[1].v - msg->left_normalized_line[0].v) ;
+
 	right_segment_msg.color=right_segment_msg.WHITE;
-	right_segment_msg.pixels_normalized[0].x=msg->right_normalized_line[0].u;
-	right_segment_msg.pixels_normalized[0].y=msg->right_normalized_line[0].v;
-	right_segment_msg.pixels_normalized[1].x=msg->right_normalized_line[1].u;
-	right_segment_msg.pixels_normalized[1].y=msg->right_normalized_line[1].v;
+	right_segment_msg.pixels_normalized[0].y=msg->right_normalized_line[0].u;
+	right_segment_msg.pixels_normalized[0].x=msg->right_normalized_line[0].v;
+	right_segment_msg.pixels_normalized[1].y=msg->right_normalized_line[1].u;
+	right_segment_msg.pixels_normalized[1].x=msg->right_normalized_line[1].v;
+	right_segment_msg.normal.x= -1.0* ( msg->right_normalized_line[1].u - msg->right_normalized_line[0].u) ;
+	right_segment_msg.normal.y= -1.0*  ( msg->right_normalized_line[1].v - msg->right_normalized_line[0].v) ;
 	//left_segment_msg.normal.x=
 	//left_segment_msg.normal.y=
 	segments_msg.segments.push_back(left_segment_msg);
@@ -96,7 +101,7 @@ void LCM2ROS::segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::stri
     pub_segment.publish(segments_msg);
     //segment_msg.segments
     printf("Get lcmmessage\n");
-    printf("A number:	%lf\n",msg->left_normalized_line[0].u);
+    //printf("A number:	%lf\n",msg->left_normalized_line[0].u);
 
 }
 
