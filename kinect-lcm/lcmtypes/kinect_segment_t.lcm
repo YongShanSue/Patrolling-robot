@@ -1,0 +1,8 @@
+package kinect;
+
+struct segment_t
+{
+    int64_t  timestamp;
+    kinect.projected_point2d_t	line[2];
+    int64_t side;		//left:0, right:1
+}

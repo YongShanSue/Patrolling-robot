@@ -10,7 +10,7 @@
 //#include "lcmtypes/april_tags/caffe_class_array_t.hpp"
 //#include "lcmtypes/april_tags/quad_proposal_t.hpp"
 //#include <lcmtypes/april_tags/tessocr_string_t.hpp>
-#include <lcmtypes/kinect/segmentlist_v1_t.hpp>
+#include <lcmtypes/kinect/segmentlist_v2_t.hpp>
 
 
 //#include <nav_msgs/Odometry.h>
@@ -42,7 +42,7 @@ class LCM2ROS
         std::string veh_; 
 
 		// caffe prediction callback 
-		void segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::string &channel, const kinect::segmentlist_v1_t* msg);
+		void segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::string &channel, const kinect::segmentlist_v2_t* msg);
 
 
 
@@ -73,10 +73,27 @@ LCM2ROS::LCM2ROS(boost::shared_ptr<lcm::LCM> &lcm_, ros::NodeHandle &nh_, std::s
 }
 
 //caffe prediction callback 
-void LCM2ROS::segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::string &channel, const kinect::segmentlist_v1_t* msg)
+void LCM2ROS::segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::string &channel, const kinect::segmentlist_v2_t* msg)
 {
-	duckietown_msgs::SegmentList segments_msg ;
-	duckietown_msgs::Segment left_segment_msg ;
+	duckietown_msgs::SegmentList segments_msg ;	
+	for(int i=0;i<msg->number;i++){
+		duckietown_msgs::Segment segment_msg ;
+		if(msg->segmentlist[i].side==0)
+			segment_msg.color=segment_msg.YELLOW;
+		else
+			segment_msg.color=segment_msg.WHITE;
+		segment_msg.pixels_normalized[0].y=msg->segmentlist[i].line[0].u;
+		segment_msg.pixels_normalized[0].x=msg->segmentlist[i].line[0].v*-1.0;
+		segment_msg.pixels_normalized[1].y=msg->segmentlist[i].line[1].u;
+		segment_msg.pixels_normalized[1].x=msg->segmentlist[i].line[1].v*-1.0;
+		segment_msg.normal.x= ( msg->segmentlist[i].line[1].u - msg->segmentlist[i].line[0].u) ;
+		segment_msg.normal.y=  ( msg->segmentlist[i].line[1].v - msg->segmentlist[i].line[0].v) ;
+		//if(msg->road_classify)
+		segment_msg.points[0].x=	msg->road_classify;
+		segments_msg.segments.push_back(segment_msg);
+	}	
+	/*
+	duckietown_msgs::Segment segment_msg ;
 	duckietown_msgs::Segment right_segment_msg ;
 	left_segment_msg.color=left_segment_msg.YELLOW;
 	left_segment_msg.pixels_normalized[0].y=msg->left_normalized_line[0].u;
@@ -93,11 +110,10 @@ void LCM2ROS::segmentlistHandler(const lcm::ReceiveBuffer* rbuf, const std::stri
 	right_segment_msg.pixels_normalized[1].x=msg->right_normalized_line[1].v;
 	right_segment_msg.normal.x= -1.0* ( msg->right_normalized_line[1].u - msg->right_normalized_line[0].u) ;
 	right_segment_msg.normal.y= -1.0*  ( msg->right_normalized_line[1].v - msg->right_normalized_line[0].v) ;
-	//left_segment_msg.normal.x=
-	//left_segment_msg.normal.y=
+
 	segments_msg.segments.push_back(left_segment_msg);
 	segments_msg.segments.push_back(right_segment_msg);
-	
+	*/
     pub_segment.publish(segments_msg);
     //segment_msg.segments
     printf("Get lcmmessage\n");

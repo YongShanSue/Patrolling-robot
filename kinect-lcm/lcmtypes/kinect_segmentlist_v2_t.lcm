@@ -1,0 +1,10 @@
+package kinect;
+
+struct segmentlist_v2_t
+{
+    int64_t  timestamp;
+    int64_t  number;
+    int64_t  road_classify;		//one way:0, intersection:1
+    kinect.segment_t segmentlist[number];
+
+}

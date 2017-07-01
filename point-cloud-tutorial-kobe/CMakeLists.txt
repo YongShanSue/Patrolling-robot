@@ -43,38 +43,53 @@ pods_install_pkg_config_file(rv-kinect-frame-pcl-utils
     REQUIRES lcm eigen3
     VERSION 0.0.1)
 
-# parse
-add_executable(rv-kinect-frame-pcl-kobe-demo
-    src/rv-kinect-frame-pcl-lcm-simple-kobe.cpp 
+ #parse
+#add_executable(rv-kinect-frame-pcl-kobe-demo
+ #   src/rv-kinect-frame-pcl-lcm-simple-kobe.cpp 
+  #  src/rv-cv-pcl-utils.cpp
+ #   src/haptic-array-generator.cpp)
+#pods_use_pkg_config_packages(rv-kinect-frame-pcl-kobe-demo lcm eigen3 bot2-lcmgl-client)    
+
+ #parse
+add_executable(rv-kinect-frame-pcl-kobe-demo2
+    src/rv-kinect-frame-pcl-lcm-simple-kobe-v2.cpp 
     src/rv-cv-pcl-utils.cpp
     src/haptic-array-generator.cpp)
-pods_use_pkg_config_packages(rv-kinect-frame-pcl-kobe-demo lcm eigen3 bot2-lcmgl-client)    
-target_link_libraries(rv-kinect-frame-pcl-kobe-demo
+pods_use_pkg_config_packages(rv-kinect-frame-pcl-kobe-demo2 lcm eigen3 bot2-lcmgl-client)    
+target_link_libraries(rv-kinect-frame-pcl-kobe-demo2
     ${LINK_LIBS} ${OpenCV_LIBS} 
     rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
-pods_install_executables(rv-kinect-frame-pcl-kobe-demo)
-
+pods_install_executables(rv-kinect-frame-pcl-kobe-demo2)
+#Asus Xtion vis
+#add_executable(rv-asus-viewer
+ #   src/rv-asus-viewer.cpp 
+  #  src/rv-cv-pcl-utils.cpp
+  #  src/haptic-array-generator.cpp)
+#pods_use_pkg_config_packages(rv-asus-viewer lcm eigen3 bot2-lcmgl-client)    #
+#target_link_libraries(rv-asus-viewer
+ #   ${LINK_LIBS} ${OpenCV_LIBS} 
+  #  rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
+#pods_install_executables(rv-asus-viewer)
 # Asus Xtion vis
-add_executable(rv-asus-viewer
-    src/rv-asus-viewer.cpp 
-    src/rv-cv-pcl-utils.cpp
-    src/haptic-array-generator.cpp)
-pods_use_pkg_config_packages(rv-asus-viewer lcm eigen3 bot2-lcmgl-client)    
-target_link_libraries(rv-asus-viewer
-    ${LINK_LIBS} ${OpenCV_LIBS} 
-    rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
-pods_install_executables(rv-asus-viewer)
-
+#add_executable(rv-object-cluster
+ #   src/rv-kinect-object-cluster.cpp 
+  #  src/rv-cv-pcl-utils.cpp
+   # src/haptic-array-generator.cpp)
+#pods_use_pkg_config_packages(rv-object-cluster lcm eigen3 bot2-lcmgl-client)    
+#target_link_libraries(rv-object-cluster
+ #   ${LINK_LIBS} ${OpenCV_LIBS} 
+  #  rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
+#pods_install_executables(rv-object-cluster)
 # vis
-add_executable(rv-vis
-    src/rv-vis.cpp src/rv-cv-pcl-utils.cpp)
-pods_use_pkg_config_packages(rv-vis 
-    lcm eigen3 bot2-lcmgl-client )    
-target_link_libraries(rv-vis 
-    ${LINK_LIBS} ${OpenCV_LIBS} 
-    rv-cv-bridge-lcm rv-kinect-frame-pcl-utils bot2-lcmgl-client
-    )
-pods_install_executables(rv-vis)
+#add_executable(rv-vis
+ #   src/rv-vis.cpp src/rv-cv-pcl-utils.cpp)
+#pods_use_pkg_config_packages(rv-vis 
+ #   lcm eigen3 bot2-lcmgl-client )    
+#target_link_libraries(rv-vis 
+ #   ${LINK_LIBS} ${OpenCV_LIBS} 
+  #  rv-cv-bridge-lcm rv-kinect-frame-pcl-utils bot2-lcmgl-client
+   # )
+#pods_install_executables(rv-vis)
 
 # caffe
 #add_subdirectory(src)

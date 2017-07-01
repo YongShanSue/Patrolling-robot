@@ -9,17 +9,17 @@
 #define RV_KINECT_FRAME_PCL_H_
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <iostream>
 #include <fstream>
 #include <istream>
 
 // may need to set the correct path
-#include <pcl-1.7/pcl/io/io.h>
-#include <pcl-1.7/pcl/io/pcd_io.h>
 #include <pcl-1.7/pcl/point_types.h>
 #include <pcl-1.7/pcl/features/integral_image_normal.h>
 #include <pcl-1.7/pcl/common/transforms.h>
+#include <pcl/common/common.h>
 #include <pcl-1.7/pcl/features/integral_image_normal.h>
 #include <pcl-1.7/pcl/visualization/cloud_viewer.h>
 #include <pcl-1.7/pcl/point_types.h>
@@ -35,19 +35,29 @@
 #include <pcl-1.7/pcl/sample_consensus/ransac.h>
 #include <pcl-1.7/pcl/segmentation/sac_segmentation.h>
 #include <pcl-1.7/pcl/filters/extract_indices.h>
-
+/////////Object cluster
+#include <pcl-1.7/pcl/common/projection_matrix.h>
+#include <pcl-1.7/pcl/ModelCoefficients.h>
+#include <pcl-1.7/pcl/filters/extract_indices.h>
+#include <pcl-1.7/pcl/filters/voxel_grid.h>
+#include <pcl-1.7/pcl/features/normal_3d.h>
+#include <pcl-1.7/pcl/kdtree/kdtree.h>
+#include <pcl-1.7/pcl/sample_consensus/method_types.h>
+#include <pcl-1.7/pcl/sample_consensus/model_types.h>
+#include <pcl-1.7/pcl/segmentation/sac_segmentation.h>
+#include <pcl-1.7/pcl/segmentation/extract_clusters.h>
+///////////////////
 
 #include <lcm/lcm.h>
 #include <bot_core/bot_core.h>
 #include <bot_lcmgl_client/lcmgl.h>
 #include <GL/gl.h>
-
 #include <lcmtypes/bot_core_image_t.h>
 #include <lcmtypes/kinect_frame_msg_t.h>
 #include <lcmtypes/obstacle_haptic_array_t.h>
 #include <lcmtypes/obstacle_tts_t.h>
-#include <lcmtypes/kinect_segmentlist_t.h>
-
+#include <lcmtypes/kinect_segmentlist_v2_t.h>
+#include <lcmtypes/kinect_segment_t.h>
 #include <kinect/kinect-utils.h>
 
 #include <cv_bridge_lcm/rv-cv-bridge-lcm.h>
@@ -143,7 +153,7 @@ private:
 	bot_lcmgl_t* lcmgl_h;
 	bot_lcmgl_t* lcmgl_pointcloud;
 	bot_lcmgl_t* lcmgl_viewer;
-	kinect_segmentlist_t* segment =new kinect_segmentlist_t();
+	kinect_segmentlist_v2_t* segment =new kinect_segmentlist_v2_t();
 };
 
 #endif /* KINECT_FRAME_PCL_H_ */

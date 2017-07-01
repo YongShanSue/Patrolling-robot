@@ -47,5 +47,13 @@ target_link_libraries(rv-lcmtoRos_segmentlist
     ${LINK_LIBS} ${OpenCV_LIBS} ${catkin_LIBRARIES}
     rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
 pods_install_executables(rv-lcmtoRos_segmentlist)
-
+# parse
+add_executable(rv-lcmtoRos_segmentlist_v2
+    src/lcmtoRos_segmentlist_v2.cpp 
+)
+pods_use_pkg_config_packages(rv-lcmtoRos_segmentlist_v2 lcm eigen3 bot2-lcmgl-client)    
+target_link_libraries(rv-lcmtoRos_segmentlist_v2
+    ${LINK_LIBS} ${OpenCV_LIBS} ${catkin_LIBRARIES}
+    rv-cv-bridge-lcm rv-kinect-frame-pcl-utils)
+pods_install_executables(rv-lcmtoRos_segmentlist_v2)
 
