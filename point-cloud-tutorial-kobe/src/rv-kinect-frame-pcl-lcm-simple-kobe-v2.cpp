@@ -410,17 +410,6 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  //////////////////Calculate the histogram of "Difference of Normal"
 		  double curpercent[10];
 		  double curvatur_hit[10];
-
-		  /*
-		  int reg2=(int)((minPt.z)/0.05)-1;
-		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
-		  double height[reg1-reg2+1];
-		  double height_hit[reg1-reg2+1];
-		  for(int i=0;i<reg1-reg2+1;i++){
-		  	height[i]=minPt.z+0.05*i;
-		  	height_hit[i]=0;
-		  }
-		  	
 		  for(int i=0;i<10;i++)
 		  	curvatur_hit[i]=0;
 		  for(int i=0;i<doncloud->points.size();i++){
@@ -444,11 +433,19 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  		curvatur_hit[8]++; 
 		  	else if( doncloud->points[i].curvature <1.0 && doncloud->points[i].curvature>0.9)
 		  		curvatur_hit[9]++; 
-		  	for(int j=0;j<reg1-reg2;j++){
-		  		if(doncloud->points[i].z<height[j+1] && doncloud->points[i].z>=height[j])
-		  			height_hit[j]++;
-		  	}
+		  	
 		  }
+		  /*
+		  int reg2=(int)((minPt.z)/0.05)-1;
+		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
+		  double height[reg1-reg2+1];
+		  double height_hit[reg1-reg2+1];
+		  for(int i=0;i<reg1-reg2+1;i++){
+		  	height[i]=minPt.z+0.05*i;
+		  	height_hit[i]=0;
+		  }
+		  	
+		  
 		  for(int i=0;i<reg1-reg2;i++){
 		  		height_hit[i]=height_hit[i]/doncloud->points.size();
 		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
