@@ -642,7 +642,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			  		printf("%g ",sum);
 			  	}
 			  	printf("\n");
-			  	int intersection=0;
+			  	int roadtype=0;
 			  	int corner=0; //left:1, right:2
 			  	double corner_index_1=-1;
 				double corner_index_2=-2;
@@ -653,15 +653,22 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  				double Dot_Product=line_vector[i].values[3]*line_vector[j].values[3]+line_vector[i].values[4]*line_vector[j].values[4]+line_vector[i].values[5]*line_vector[j].values[5];
 		  				Dot_Product=fabs(Dot_Product);
 		  				if(Dot_Product<0.85){
-		  					intersection=1;
+		  					roadtype=1;
 		  					if(sqrt(pow(line_Segments_vertex[i][0]-line_Segments_vertex[j][0] ,2)+pow(line_Segments_vertex[i][1]-line_Segments_vertex[j][1] ,2)+\
 		  					pow(line_Segments_vertex[i][2]-line_Segments_vertex[j][2] ,2))<1){
 		  						corner_index_1=i;
 		  						corner_index_2=j;
 		  					}
+		  					if(sqrt(pow(line_Segments_vertex[i][3]-line_Segments_vertex[j][3] ,2)+pow(line_Segments_vertex[i][4]-line_Segments_vertex[j][4] ,2)+\
+		  					pow(line_Segments_vertex[i][5]-line_Segments_vertex[j][5] ,2))<1){
+		  						roadtype=2;
+		  						break;
+		  					}
 		  				}
 		  				printf("Inner dot\t%g\n",Dot_Product);
 		  			}
+		  			if(roadtype==2)
+		  				break;
 		  		}
 		  		gettimeofday(&stop1,NULL);
 				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
@@ -673,13 +680,14 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 
 		  		/////////////////Type 1 means there is a connected intersection
-				if(intersection==1){
+				if(roadtype==1){
 					segment->road_classify=1;
 
 					printf("This is a intersection\n");
 					if(corner_index_1!=-1){
 						printf("type1\n");
 						for(int i=0;i<count;i++){
+
 							if(cloud_average[i]<0){
 								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 							}
@@ -706,82 +714,75 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 						int indexmax=0;
 						int indexmin=0;
 						for(int i=0;i<count;i++){
-							if(cloud_average[i]<0)
+							if(line_Segments_vertex[i][1]<0)
 								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 							//	indexmax=i;
-							if(cloud_average[i]>0)
+							if(line_Segments_vertex[i][1]>0)
 								printf("left:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 
 							//	indexmin=i;
 						}
-						//printf("left:\t%g %g %g\n",line_vector[indexmax].values[3],line_vector[indexmax].values[4],line_vector[indexmax].values[5]);
-						//printf("right:\t%g %g %g\n",line_vector[indexmin].values[3],line_vector[indexmin].values[4],line_vector[indexmin].values[5]);
-
+						
 
 					}
 					
 				}
 				/////////////////Type 3 means there is one way	
-				else{
+				else if (roadtype==0){
 					segment->road_classify=0;
 					printf("type3\n");
 					int indexmax=0;
 					int indexmin=0;
 					printf("This is an one way\n"); 
 					for(int i=0;i<count;i++){
-							if(cloud_average[i]<0)
+							if(line_Segments_vertex[i][1]<0)
 								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 							//	indexmax=i;
-							if(cloud_average[i]>0)
+							if(line_Segments_vertex[i][1]>0)
 								printf("left:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 						//printf("straght:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 					}
 				 	 
 				 	
 				}
+				//Type 4: Death way
+				else if (roadtype==2){
+					segment->road_classify=1;
+					printf("This is a death way.\n");
+				}
 				kinect_segment_t *segmentlist =  (kinect_segment_t*)malloc(count*sizeof(kinect_segment_t));
 				segment->segmentlist=segmentlist;
 				for(int i=0;i<count;i++){
 							printf("Test:\t%g %g %g %g\n",line_Segments_vertex[i][0],line_Segments_vertex[i][1],line_Segments_vertex[i][3],line_Segments_vertex[i][4]);
-							if(pow(line_Segments_vertex[i][0],2)+pow(line_Segments_vertex[i][1],2) < pow(line_Segments_vertex[i][3],2)+pow(line_Segments_vertex[i][4],2)){
+							segment->segmentlist[i].line[0].u=line_Segments_vertex[i][0];
+							segment->segmentlist[i].line[0].v=line_Segments_vertex[i][1];
+							if((line_Segments_vertex[i][3]-line_Segments_vertex[i][0])*line_vector[i].values[3]+\
+								(line_Segments_vertex[i][4]-line_Segments_vertex[i][1])*line_vector[i].values[4]>0){
+								segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]+line_vector[i].values[3];
+								segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]+line_vector[i].values[4];
 								printf("YES\t");
-								segment->segmentlist[i].line[0].u=line_Segments_vertex[i][0];
-								segment->segmentlist[i].line[0].v=line_Segments_vertex[i][1];
-								if((line_Segments_vertex[i][3]-line_Segments_vertex[i][0])*line_vector[i].values[3]+\
-									(line_Segments_vertex[i][4]-line_Segments_vertex[i][1])*line_vector[i].values[4]>0){
-									segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]+line_vector[i].values[3];
-									segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]+line_vector[i].values[4];
-									printf("YES\t");
-								}
-								else{
-									printf("NO\t");
-									segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]-line_vector[i].values[3];
-									segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]-line_vector[i].values[4];
-								}
 							}
 							else{
 								printf("NO\t");
-								segment->segmentlist[i].line[0].u=line_Segments_vertex[i][3];
-								segment->segmentlist[i].line[0].v=line_Segments_vertex[i][4];
-								if((line_Segments_vertex[i][0]-line_Segments_vertex[i][3])*line_vector[i].values[3]+\
-									(line_Segments_vertex[i][1]-line_Segments_vertex[i][4])*line_vector[i].values[4]>0){
-									segment->segmentlist[i].line[1].u=line_Segments_vertex[i][3]+line_vector[i].values[3];
-									segment->segmentlist[i].line[1].v=line_Segments_vertex[i][4]+line_vector[i].values[4];
-									printf("YES\t");
-								}
-								else{
-									printf("NO\t");
-									segment->segmentlist[i].line[1].u=line_Segments_vertex[i][3]-line_vector[i].values[3];
-									segment->segmentlist[i].line[1].v=line_Segments_vertex[i][4]-line_vector[i].values[4];
-								}
+								segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]-line_vector[i].values[3];
+								segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]-line_vector[i].values[4];
 							}
+							if (roadtype==2){
+								segment->segmentlist[i].line[0].u=1.0;
+								segment->segmentlist[i].line[0].v=-1.0;
+								segment->segmentlist[i].line[1].u=1.0+1.0/sqrt(2);
+								segment->segmentlist[i].line[1].v=-1.0+1.0/sqrt(2);
+							}
+							
+							
+							
 							segment->segmentlist[i].side=0;
-							if(cloud_average[i]<0){								
+							if(segment->segmentlist[i].line[0].v<0){								
 								segment->segmentlist[i].side=1;			//right:1
 								printf("right:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
 							}
 							//	indexmax=i;
-							if(cloud_average[i]>0){
+							if(segment->segmentlist[i].line[0].v>0){
 								segment->segmentlist[i].side=0;			//left:0
 								printf("left:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
 							}
