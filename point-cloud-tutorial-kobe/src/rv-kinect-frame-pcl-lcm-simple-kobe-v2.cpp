@@ -9,6 +9,8 @@ bool finish_;
 double duration;                    //Variable time duration
 struct timeval start;               //Variable start time
 struct timeval stop;                //Variable stop time
+struct timeval start1;               //Variable start time
+struct timeval stop1;                //Variable stop time
 blKinectFramePCL::blKinectFramePCL(lcm_t* lcm) {
 
 	this->lcm_ = lcm;
@@ -16,7 +18,7 @@ blKinectFramePCL::blKinectFramePCL(lcm_t* lcm) {
 	kcal = kinect_calib_new();
 	rv::get_default_kinect_calib(kcal);
 //	rv::get_default_ti_board_calib(kcal);
-	kinect_decimate =8.0;
+	kinect_decimate =10.0;
 
 	cv_bridge = new cvBridgeLCM(lcm, lcm);
 	
@@ -219,7 +221,7 @@ blKinectFramePCL::~blKinectFramePCL() {
 void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
     double t_tot = (double)cvGetTickCount();
-
+    double duration1;
 	/////////////////////////////////////////////////////////////
 	// State Variable
 	////////////////////////////////////////////////////////////
@@ -256,6 +258,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 	
 	////////////////////////////////save to pcd file///////////////////////////
 	if(msg->depth.depth_data_format == KINECT_DEPTH_MSG_T_DEPTH_MM){
+		gettimeofday(&start1,NULL);
 		//Bot-lcm-viewer
 		bot_lcmgl_translated(lcmgl_pointcloud, 0, 0, 0);
     		bot_lcmgl_line_width(lcmgl_pointcloud, 4.0f);
@@ -291,12 +294,62 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  condrem1.setInputCloud (cloud_raw);
 		  condrem1.setKeepOrganized(true);
 		  condrem1.filter (*cloud_filtered);
+
+		  int reg2=(int)((minPt.z)/0.05)-1;
+		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
+		  double height[reg1-reg2+1];
+		  double height_hit[reg1-reg2+1];
+		  for(int i=0;i<reg1-reg2+1;i++){
+		  	height[i]=minPt.z+0.05*i;
+		  	height_hit[i]=0;
+		  }
+		  	
+		  for(int i=0;i<cloud_filtered->points.size();i++){
+		  	for(int j=0;j<reg1-reg2;j++){
+		  		if(cloud_filtered->points[i].z<height[j+1] && cloud_filtered->points[i].z>=height[j])
+		  			height_hit[j]++;
+		  	}
+		  }
+		  for(int i=0;i<reg1-reg2;i++){
+		  		height_hit[i]=height_hit[i]/cloud_filtered->points.size();
+		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
+		  }
+		  double h_percent=0;
+		  int h_index=0;
+		  for(int i=0;i<reg1-reg2;i++){
+		  		height_hit[i]=height_hit[i];
+		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
+		  		if(h_percent < 0.4){
+		  			h_percent += height_hit[i];
+		  			//printf("h_percent:%lf,index:%d\n",h_percent,h_index);
+		  			h_index++;
+		  		}
+		  		
+		  }
+		  printf("h_index:%d\n",h_index);
+		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, height[h_index+2])));		//-1.3
+		  condrem1.setInputCloud (cloud_filtered);
+		  condrem1.setKeepOrganized(true);
+		  condrem1.filter (*cloud_filtered);
+
+
+
+
+
+
+
+
 		  cloud_raw=cloud_filtered;
 		  cloud_raw_reg=cloud_filtered;
 
 
-		  
-		  
+		  gettimeofday(&stop1,NULL);
+		  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+		  printf("Time Far pointcloud filtering out:\t%lf\n",duration1);
+		  gettimeofday(&start1,NULL);
+
+
+
 
 		// Create a search tree, use KDTreee for non-organized data.
 		  pcl::search::Search<pcl::PointXYZRGB>::Ptr tree;
@@ -333,6 +386,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  ne1.setRadiusSearch (0.4);			//zed = 0.14
 		  ne1.compute (*normals_large_scale);
 		
+
+
 		  // Create output cloud for DoN results
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud (new pcl::PointCloud<pcl::PointNormal>);
 		  pcl::copyPointCloud<pcl::PointXYZRGB, pcl::PointNormal>(*cloud_raw_reg, *doncloud);
@@ -352,9 +407,11 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_right=doncloud;
 
 
-		  //////////////////Calculate the hostogram of "Difference of Normal"
+		  //////////////////Calculate the histogram of "Difference of Normal"
 		  double curpercent[10];
 		  double curvatur_hit[10];
+
+		  /*
 		  int reg2=(int)((minPt.z)/0.05)-1;
 		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
 		  double height[reg1-reg2+1];
@@ -392,11 +449,6 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  			height_hit[j]++;
 		  	}
 		  }
-
-		  for(int i=0;i<10;i++){
-		  		curpercent[i]=curvatur_hit[i]/doncloud->points.size();
-		  		printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
-		  }
 		  for(int i=0;i<reg1-reg2;i++){
 		  		height_hit[i]=height_hit[i]/doncloud->points.size();
 		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
@@ -414,6 +466,13 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  		
 		  }
 		  printf("h_index:%d\n",h_index);
+			*/
+		  for(int i=0;i<10;i++){
+		  		curpercent[i]=curvatur_hit[i]/doncloud->points.size();
+		  		printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
+		  }
+		  
+		  
 
 		  ///////////////////////Filter out the high curvature(ground line) and ground.
 
@@ -431,6 +490,12 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  doncloud_right = doncloud_filtered_right;
 		  pointcloudResize(doncloud_right);
 		 
+ 		gettimeofday(&stop1,NULL);
+		  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+		  printf("Time filter out ground:\t%lf\n",duration1);
+		  gettimeofday(&start1,NULL);
+
+		 	
 		
 		   pcl::PointCloud<pcl::PointXYZRGB>::Ptr doncloud1_right (new pcl::PointCloud<pcl::PointXYZRGB>); 
 		   pcl::PointCloud<pcl::PointXYZRGB>::Ptr finalreg_right (new pcl::PointCloud<pcl::PointXYZRGB>); 
@@ -532,6 +597,11 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			    			bot_lcmgl_vertex3f(lcmgl_pointcloud, line_project_to_xy_filtered->points[i].x,line_project_to_xy_filtered->points[i].y, line_project_to_xy_filtered->points[i].z);	    
 				  	}
 			  	}
+
+			  	gettimeofday(&stop1,NULL);
+				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+				  printf("Time ransac:\t%lf\n",duration1);
+				  gettimeofday(&start1,NULL);
 			  	line_Segments_vertex.assign(count,row);
 
 			  	///////////////////Adjust the direction so the vector will be toward the front.
@@ -593,7 +663,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  				printf("Inner dot\t%g\n",Dot_Product);
 		  			}
 		  		}
-
+		  		gettimeofday(&stop1,NULL);
+				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+				  printf("Time Intersection detection:\t%lf\n",duration1);
+				  gettimeofday(&start1,NULL);
 
 		  		/////////////////Produce segmentlist
 		  		segment->number=count;
@@ -716,6 +789,12 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 					}
 			}
 			kinect_segmentlist_v2_t_publish(this->lcm_, "Segmentlist", this->segment);
+			gettimeofday(&stop1,NULL);
+				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+				  printf("Time publish:\t%lf\n",duration1);
+				  gettimeofday(&start1,NULL);
+
+
 			//////////////////////////////////////////////////////////
 			if(doncloud1_right->points.size()>=10){
 				for(int i=0;i<doncloud1_right->points.size ();i++){
@@ -776,7 +855,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
     		bot_lcmgl_switch_buffer(lcmgl_pointcloud);
     		////////////////////////////Free memory
     		
-    		
+    		gettimeofday(&stop1,NULL);
+				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+				  printf("Time draw:\t%lf\n",duration1);
+				  gettimeofday(&start1,NULL);
 
     	}
     	gettimeofday(&stop,NULL);
@@ -868,7 +950,7 @@ int main(int argc, char** argv)
 	float height = 1.0;
 	int h_fov = 60;
 	int v_fov = 40;
-	int decimate = 8.0;
+	int decimate = 10.0;
 	int is_rotated = 0;
 
 	int adjust_ground_height_time = 5;
