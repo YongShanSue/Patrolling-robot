@@ -575,27 +575,32 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 				    printf("LeftSize=%d\n",line_project_to_xy_leave->points.size ());
 				    pcl::PointCloud<pcl::PointXYZRGB>::Ptr line_project_to_xy_reg(new pcl::PointCloud<pcl::PointXYZRGB>) ;
 				    pcl::copyPointCloud(*line_project_to_xy_filtered,*line_project_to_xy_reg);
-
-				    line_Segments_Clouds.push_back(line_project_to_xy_reg);
-				    if(line_project_to_xy_filtered->points.size ()<regsize)
-				    	line_vector.push_back(line2);
-				    else
-				    	line_vector.push_back(line);
-				    double color=0;
-							if (count==0)
-								color=0;
-							if (count==1)
-								color=0.5;
-							if (count==2)
-								color=1.0;
-							if (count>2)
-								color=1.0;
-					count++;
-					for(int i=0;i<line_project_to_xy_filtered->points.size ();i++){
-							
-							bot_lcmgl_color3f(lcmgl_pointcloud,color, 0, 0 );
-			    			bot_lcmgl_vertex3f(lcmgl_pointcloud, line_project_to_xy_filtered->points[i].x,line_project_to_xy_filtered->points[i].y, line_project_to_xy_filtered->points[i].z);	    
-				  	}
+				    if ( pow(line_project_to_xy_reg->points[0].x,2)+pow(line_project_to_xy_reg->points[0].y,2)+pow(line_project_to_xy_reg->points[0].z,2)<3.0|| \
+				    	pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].x,2)+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].y,2)\
+				    	+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].z,2)<3.0){
+				    	line_Segments_Clouds.push_back(line_project_to_xy_reg);
+					    if(line_project_to_xy_filtered->points.size ()<regsize)
+					    	line_vector.push_back(line2);
+					    else
+					    	line_vector.push_back(line);
+					    double color=0;
+								if (count==0)
+									color=0;
+								if (count==1)
+									color=0.5;
+								if (count==2)
+									color=1.0;
+								if (count>2)
+									color=1.0;
+						count++;
+						for(int i=0;i<line_project_to_xy_filtered->points.size ();i++){
+								
+								bot_lcmgl_color3f(lcmgl_pointcloud,color, 0, 0 );
+				    			bot_lcmgl_vertex3f(lcmgl_pointcloud, line_project_to_xy_filtered->points[i].x,line_project_to_xy_filtered->points[i].y, line_project_to_xy_filtered->points[i].z);	    
+					  	}
+				    }
+				    
+					
 			  	}
 
 			  	gettimeofday(&stop1,NULL);
@@ -630,6 +635,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			  			line_Segments_vertex[i][2],line_Segments_vertex[i][3],line_Segments_vertex[i][4],\
 			  			line_Segments_vertex[i][5]);
 			  	}
+
+
 			  	/////////////Calculate the average y to know the segment is on the right or on the left
 			  	vector<double> cloud_average(count, 0);  
 			  	printf("averageY: ");
