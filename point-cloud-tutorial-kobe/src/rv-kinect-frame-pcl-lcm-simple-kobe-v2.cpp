@@ -831,30 +831,12 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left);
 			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left);
 		   }
+		   //~cloud_raw;
+		   //~PointCloud (cloud_raw){}	;
+		   //delete cloud_raw;
+		   //pcl::PointCloud< pcl::PointXYZRGB >::~PointCloud (cloud_raw)	;
 
 
-		   /*
-			if(finalreg_right->points.size ()>=10){ 
-			   Eigen::Vector3d start_pt_right;
-			   Eigen::Vector3d stop_pt_right;
-			  
-			   
-			  
-			   start_pt_right << line_right.values[0],line_right.values[1],line_right.values[2];
-			   stop_pt_right << line_right.values[0]+4*line_right.values[3],line_right.values[1]+4*line_right.values[4],line_right.values[2]+4*line_right.values[5];
-			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_right, stop_pt_right);
-			   //printf("Line test:\t%f\t%f\t%f\n",line_right.values[0],line_right.values[1],line_right.values[2]);
-			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_right, stop_pt_right);
-			   this->segment->right_normalized_line[0].u=line_right.values[0];
-		    this->segment->right_normalized_line[0].v=line_right.values[1];
-		    this->segment->right_normalized_line[1].u=line_right.values[0]+line_right.values[3];
-		    this->segment->right_normalized_line[1].v=line_right.values[1]+line_right.values[4];
-		    printf("Vector right\t%lf\t%lf\n",line_right.values[3],line_right.values[4]);
-		   // printf("distance:%lf\n",sqrt(line_right.values[3]*line_right.values[3]+line_right.values[4]*line_right.values[4]));
-
-		    }
-		    kinect_segmentlist_t_publish(this->lcm_, "Segmentlist", this->segment);
-			*/
 		  	
 			bot_lcmgl_end(lcmgl_pointcloud);
     		bot_lcmgl_switch_buffer(lcmgl_pointcloud);
@@ -869,10 +851,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
     	gettimeofday(&stop,NULL);
 		duration=(stop.tv_sec-start.tv_sec)+(stop.tv_usec-start.tv_usec)/1000000.0;
 		printf("CPU Time:\t%lf\n",duration);
-    		
+    	delete rgb_buf_;	
 
 		/////////////////////////////////////Cloud segmentation/////////////////////////////////////////////////////
-
+		return;
 		
 
 }
