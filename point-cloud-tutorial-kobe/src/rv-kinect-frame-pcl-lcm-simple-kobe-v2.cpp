@@ -751,7 +751,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 				}
 				//Type 4: Death way
 				else if (roadtype==2){
-					segment->road_classify=1;
+					segment->road_classify=2;
 					printf("This is a death way.\n");
 				}
 				kinect_segment_t *segmentlist =  (kinect_segment_t*)malloc(count*sizeof(kinect_segment_t));
@@ -793,7 +793,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 						//printf("straght:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 					}
 			}
-			kinect_segmentlist_v2_t_publish(this->lcm_, "Segmentlist", this->segment);
+			if (count>0)
+				kinect_segmentlist_v2_t_publish(this->lcm_, "Segmentlist", this->segment);
 			gettimeofday(&stop1,NULL);
 				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
 				  printf("Time publish:\t%lf\n",duration1);
