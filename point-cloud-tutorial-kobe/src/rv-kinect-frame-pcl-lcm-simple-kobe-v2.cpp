@@ -112,7 +112,6 @@ void pointcloudResize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud){
 		   		cloud->points[count].x = cloud->points[i].x;
 		   		cloud->points[count].y = cloud->points[i].y;
 		   		cloud->points[count].z = cloud->points[i].z;
-		   		//cloud_raw->points[count].r = doncloud->points[i].curvature*255;
 
 		   		count++;
 		   	}
@@ -255,27 +254,25 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 	rv::unpack_kinect_frame(msg, rgb_buf_, this->kcal, this->kinect_decimate, cloud_raw);
 	pcl::copyPointCloud (*cloud_raw,*cloud_raw_reg);
 	im_rgb.data = rgb_buf_;
-	
+	double final_right_direction[2];		final_right_direction[0]=0; final_right_direction[1]=0;
+	double final_right_distance=0;
+	double final_left_direction[2];		final_left_direction[0]=0; final_left_direction[1]=0;
+	double final_left_distance=0;
 	////////////////////////////////save to pcd file///////////////////////////
 	if(msg->depth.depth_data_format == KINECT_DEPTH_MSG_T_DEPTH_MM){
 		gettimeofday(&start1,NULL);
 		//Bot-lcm-viewer
 		bot_lcmgl_translated(lcmgl_pointcloud, 0, 0, 0);
-    		bot_lcmgl_line_width(lcmgl_pointcloud, 4.0f);
-    		bot_lcmgl_point_size(lcmgl_pointcloud, 6.0f);
-    		bot_lcmgl_begin(lcmgl_pointcloud, GL_POINTS);
+    	bot_lcmgl_line_width(lcmgl_pointcloud, 4.0f);
+    	bot_lcmgl_point_size(lcmgl_pointcloud, 6.0f);
+    	bot_lcmgl_begin(lcmgl_pointcloud, GL_POINTS);
 
 		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz;
   		cloud_xyz = pcl::PointCloud<pcl::PointXYZ>::Ptr (new pcl::PointCloud<pcl::PointXYZ>);
 		pcl::PointXYZ minPt, maxPt;
     	pcl::copyPointCloud<pcl::PointXYZRGB, pcl::PointXYZ>(*cloud_raw, *cloud_xyz);
-		  pcl::getMinMax3D (*cloud_xyz, minPt, maxPt);
-  		std::cout << "Max x: " << maxPt.x << std::endl;
-  		std::cout << "Max y: " << maxPt.y << std::endl;
-  		std::cout << "Max z: " << maxPt.z << std::endl;
- 		 std::cout <<"Min x: " <<minPt.x << std::endl;
-  		std::cout << "Min y: " << minPt.y << std::endl;
-  		std::cout << "Min z: " << minPt.z << std::endl;
+		pcl::getMinMax3D (*cloud_xyz, minPt, maxPt);
+  		std::cout << "Max x: " << maxPt.x << "Max y: " << maxPt.y << "Max z: " << maxPt.z<<"Min x: " <<minPt.x << "Min y: " << minPt.y << "Min z: " << minPt.z << std::endl;
 		/////////////////////////////////////Cloud segmentation/////////////////////////////////////////////////////
     		
 
@@ -286,7 +283,6 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, minPt.z+1.2)));		//-0.3
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("y", pcl::ComparisonOps::LT, 5.0)));		//-0.3
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new   pcl::FieldComparison<pcl::PointXYZRGB> ("y", pcl::ComparisonOps::GT, -5.0)));		//-0.3
-		//zed = 2.2
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::GT, 0.0)));			//zed = 2.2
 		  range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::LT, 8.0)));			//zed = 2.2
 		  // build the filter
@@ -321,7 +317,6 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
 		  		if(h_percent < 0.4){
 		  			h_percent += height_hit[i];
-		  			//printf("h_percent:%lf,index:%d\n",h_percent,h_index);
 		  			h_index++;
 		  		}
 		  		
@@ -332,16 +327,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  condrem1.setKeepOrganized(true);
 		  condrem1.filter (*cloud_filtered);
 
-
-
-
-
-
-
-
-		  cloud_raw=cloud_filtered;
+		 // cloud_raw=cloud_filtered;
 		  cloud_raw_reg=cloud_filtered;
-
 
 		  gettimeofday(&stop1,NULL);
 		  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
@@ -352,16 +339,11 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 
 		// Create a search tree, use KDTreee for non-organized data.
-		  pcl::search::Search<pcl::PointXYZRGB>::Ptr tree;
-		  
+		  pcl::search::Search<pcl::PointXYZRGB>::Ptr tree;		  
 		  if (cloud_raw_reg->isOrganized ())
-		  {
 		    tree.reset (new pcl::search::OrganizedNeighbor<pcl::PointXYZRGB> ());
-		  }
 		  else
-		  {
 		    tree.reset (new pcl::search::KdTree<pcl::PointXYZRGB> (false));
-		  }
 			
 		  // Set the input pointcloud for the search tree
 		  tree->setInputCloud (cloud_raw_reg);	
@@ -372,8 +354,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 		 
 		  // * NOTE: setting viewpoint is very important, so that we can ensure
-		  // * normals are all pointed in the same direction!
-		   
+		  // * normals are all pointed in the same direction!	   
 		  ne1.setViewPoint (std::numeric_limits<float>::max (), std::numeric_limits<float>::max (), std::numeric_limits<float>::max ());
 
 		  // calculate normals with the small scale
@@ -382,17 +363,15 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  ne1.compute (*normals_small_scale);
 		  // calculate normals with the large scale
 		  pcl::PointCloud<pcl::PointNormal>::Ptr normals_large_scale (new pcl::PointCloud<pcl::PointNormal>);
-
 		  ne1.setRadiusSearch (0.4);			//zed = 0.14
 		  ne1.compute (*normals_large_scale);
 		
-
 
 		  // Create output cloud for DoN results
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud (new pcl::PointCloud<pcl::PointNormal>);
 		  pcl::copyPointCloud<pcl::PointXYZRGB, pcl::PointNormal>(*cloud_raw_reg, *doncloud);
 
-		  //cout << "Calculating DoN... " << endl;
+
 		  // Create DoN operator
 		  pcl::DifferenceOfNormalsEstimation<pcl::PointXYZRGB, pcl::PointNormal, pcl::PointNormal> don;
 		  don.setInputCloud (cloud_raw_reg);
@@ -408,66 +387,22 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 
 
 		  //////////////////Calculate the histogram of "Difference of Normal"
-		  double curpercent[10];
-		  double curvatur_hit[10];
-		  for(int i=0;i<10;i++)
+		double curpercent[10];
+		double curvatur_hit[10];
+		for(int i=0;i<10;i++)
 		  	curvatur_hit[i]=0;
-		  for(int i=0;i<doncloud->points.size();i++){
-		  	if( doncloud->points[i].curvature <0.1 && doncloud->points[i].curvature>=0)
-		  		curvatur_hit[0]++;
-		 	else if( doncloud->points[i].curvature <0.2 && doncloud->points[i].curvature>0.1)
-		  		curvatur_hit[1]++; 	
-		  	else if( doncloud->points[i].curvature <0.3 && doncloud->points[i].curvature>0.2)
-		  		curvatur_hit[2]++; 
-		  	else if( doncloud->points[i].curvature <0.4 && doncloud->points[i].curvature>0.3)
-		  		curvatur_hit[3]++; 
-		  	else if( doncloud->points[i].curvature <0.5 && doncloud->points[i].curvature>0.4)
-		  		curvatur_hit[4]++; 	
-		  	else if(doncloud->points[i].curvature <0.6 && doncloud->points[i].curvature>0.5)
-		  		curvatur_hit[5]++; 
-		  	else if( doncloud->points[i].curvature <0.7 && doncloud->points[i].curvature>0.6)
-		  		curvatur_hit[6]++; 
-		  	else if( doncloud->points[i].curvature <0.8 && doncloud->points[i].curvature>0.7)
-		  		curvatur_hit[7]++; 	
-		  	else if( doncloud->points[i].curvature <0.9 && doncloud->points[i].curvature>0.8)
-		  		curvatur_hit[8]++; 
-		  	else if( doncloud->points[i].curvature <1.0 && doncloud->points[i].curvature>0.9)
-		  		curvatur_hit[9]++; 
-		  	
-		  }
-		  /*
-		  int reg2=(int)((minPt.z)/0.05)-1;
-		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
-		  double height[reg1-reg2+1];
-		  double height_hit[reg1-reg2+1];
-		  for(int i=0;i<reg1-reg2+1;i++){
-		  	height[i]=minPt.z+0.05*i;
-		  	height_hit[i]=0;
-		  }
-		  	
+		for(int i=0;i<doncloud->points.size();i++){
+		  	double a=0;
+		  	for(int j=0;j<10;j++){
+		  		if( doncloud->points[i].curvature <0.1*j+0.1 && doncloud->points[i].curvature>=0.1*j)
+		  			curvatur_hit[j]++;
+		  	}		  	
+		}
 		  
-		  for(int i=0;i<reg1-reg2;i++){
-		  		height_hit[i]=height_hit[i]/doncloud->points.size();
-		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
-		  }
-		  double h_percent=0;
-		  int h_index=0;
-		  for(int i=0;i<reg1-reg2;i++){
-		  		height_hit[i]=height_hit[i];
-		  		printf("%lf < z < %lf = %lf\n",height[i],height[i+1],height_hit[i]);
-		  		if(h_percent < 0.4){
-		  			h_percent += height_hit[i];
-		  			//printf("h_percent:%lf,index:%d\n",h_percent,h_index);
-		  			h_index++;
-		  		}
-		  		
-		  }
-		  printf("h_index:%d\n",h_index);
-			*/
-		  for(int i=0;i<10;i++){
-		  		curpercent[i]=curvatur_hit[i]/doncloud->points.size();
-		  		printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
-		  }
+		for(int i=0;i<10;i++){
+		  	curpercent[i]=curvatur_hit[i]/doncloud->points.size();
+		  	printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
+		}
 		  
 		  
 
@@ -525,9 +460,6 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			if(line_project_to_xy->points.size()>=10){
 				for(int i=0;i<line_project_to_xy->points.size ();i++){
 						line_project_to_xy->points[i].z=0;		//Preset z to 0 so that line ransac can be successful
-						//bot_lcmgl_color3f(lcmgl_pointcloud, 1,  0, 0);
-						//bot_lcmgl_color3f(lcmgl_pointcloud, 0,  doncloud1_right->points[i].g/255.0, 0);
-		    			//bot_lcmgl_vertex3f(lcmgl_pointcloud, line_project_to_xy->points[i].x,line_project_to_xy->points[i].y, line_project_to_xy->points[i].z);	    
 			  	}		
 			  	pcl::PointCloud<pcl::PointXYZRGB>::Ptr line_project_to_xy_leave(new pcl::PointCloud<pcl::PointXYZRGB>) ;
 			  	pcl::PointCloud<pcl::PointXYZRGB>::Ptr line_project_to_xy_filtered(new pcl::PointCloud<pcl::PointXYZRGB>) ;
@@ -572,29 +504,34 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 				    printf("LeftSize=%d\n",line_project_to_xy_leave->points.size ());
 				    pcl::PointCloud<pcl::PointXYZRGB>::Ptr line_project_to_xy_reg(new pcl::PointCloud<pcl::PointXYZRGB>) ;
 				    pcl::copyPointCloud(*line_project_to_xy_filtered,*line_project_to_xy_reg);
-				    if ( pow(line_project_to_xy_reg->points[0].x,2)+pow(line_project_to_xy_reg->points[0].y,2)+pow(line_project_to_xy_reg->points[0].z,2)<3.0|| \
+
+				    //If the nearest pointclouds of detected wall is too far , then ignore it.
+				    if ( pow(line_project_to_xy_reg->points[0].x,2)+pow(line_project_to_xy_reg->points[0].y,2)+pow(line_project_to_xy_reg->points[0].z,2)<5.0|| \
 				    	pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].x,2)+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].y,2)\
-				    	+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].z,2)<3.0){
+				    	+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].z,2)<5.0){
 				    	line_Segments_Clouds.push_back(line_project_to_xy_reg);
 					    if(line_project_to_xy_filtered->points.size ()<regsize)
 					    	line_vector.push_back(line2);
 					    else
 					    	line_vector.push_back(line);
-					    double color=0;
-								if (count==0)
-									color=0;
-								if (count==1)
-									color=0.5;
-								if (count==2)
-									color=1.0;
-								if (count>2)
-									color=1.0;
+					   
 						count++;
+						/*
+						double color=0;
+							if (count==0)
+								color=0;
+							if (count==1)
+								color=0.5;
+							if (count==2)
+								color=1.0;
+							if (count>2)
+								color=1.0;
 						for(int i=0;i<line_project_to_xy_filtered->points.size ();i++){
 								
 								bot_lcmgl_color3f(lcmgl_pointcloud,color, 0, 0 );
 				    			bot_lcmgl_vertex3f(lcmgl_pointcloud, line_project_to_xy_filtered->points[i].x,line_project_to_xy_filtered->points[i].y, line_project_to_xy_filtered->points[i].z);	    
 					  	}
+					  	*/
 				    }
 				    
 					
@@ -633,8 +570,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			  			line_Segments_vertex[i][5]);
 			  	}
 
-
-			  	/////////////Calculate the average y to know the segment is on the right or on the left
+			  	/*
+			  	//Calculate the average y to know the segment is on the right or on the left
 			  	vector<double> cloud_average(count, 0);  
 			  	printf("averageY: ");
 			  	for(int i=0;i<count;i++){
@@ -646,16 +583,18 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 			  		printf("%g ",sum);
 			  	}
 			  	printf("\n");
+			  	*/
 			  	int roadtype=0;
 			  	int corner=0; //left:1, right:2
 			  	double corner_index_1=-1;
 				double corner_index_2=-2;
-				//////////////////////Claculate the angle between tow lines, if the angle is big, then there is a intersection.
+				//Check whether it is a intersection or one way or death way
 		  		for(int i=0;i<count;i++){
 		  			//printf("X, -Y, Z:\t%g %g %g %g %g %g\n",line_vector[i].values[0],line_vector[i].values[1],line_vector[i].values[2],line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
 		  			for(int j=i+1;j<count;j++){
 		  				double Dot_Product=line_vector[i].values[3]*line_vector[j].values[3]+line_vector[i].values[4]*line_vector[j].values[4]+line_vector[i].values[5]*line_vector[j].values[5];
 		  				Dot_Product=fabs(Dot_Product);
+		  				//Check whether it is a intersection or one way
 		  				if(Dot_Product<0.85){
 		  					roadtype=1;
 		  					if(sqrt(pow(line_Segments_vertex[i][0]-line_Segments_vertex[j][0] ,2)+pow(line_Segments_vertex[i][1]-line_Segments_vertex[j][1] ,2)+\
@@ -663,6 +602,7 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  						corner_index_1=i;
 		  						corner_index_2=j;
 		  					}
+		  					//Check whether it is a death way
 		  					if(sqrt(pow(line_Segments_vertex[i][3]-line_Segments_vertex[j][3] ,2)+pow(line_Segments_vertex[i][4]-line_Segments_vertex[j][4] ,2)+\
 		  					pow(line_Segments_vertex[i][5]-line_Segments_vertex[j][5] ,2))<1){
 		  						roadtype=2;
@@ -675,133 +615,121 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  				break;
 		  		}
 		  		gettimeofday(&stop1,NULL);
-				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
-				  printf("Time Intersection detection:\t%lf\n",duration1);
-				  gettimeofday(&start1,NULL);
+				duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
+				printf("Time Intersection detection:\t%lf\n",duration1);
+				gettimeofday(&start1,NULL);
 
 		  		/////////////////Produce segmentlist
 		  		segment->number=count;
 
-
-		  		/////////////////Type 1 means there is a connected intersection
+		  		/////////////////Roadtype1:  intersection
 				if(roadtype==1){
 					segment->road_classify=1;
-
 					printf("This is a intersection\n");
-					if(corner_index_1!=-1){
-						printf("type1\n");
-						for(int i=0;i<count;i++){
-
-							if(cloud_average[i]<0){
-								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-							}
-							//	indexmax=i;
-							if(cloud_average[i]>0)
-								printf("left:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-
-							//	indexmin=i;
-						}
-						/*
-						if (cloud_average[corner_index_1]>cloud_average[corner_index_2]){
-							printf("left:\t%g %g %g\n",line_vector[corner_index_1].values[3],line_vector[corner_index_1].values[4],line_vector[corner_index_1].values[5]);
-							printf("right:\t%g %g %g\n",line_vector[corner_index_2].values[3],line_vector[corner_index_2].values[4],line_vector[corner_index_2].values[5]);
-						}
-						else{
-							printf("left:\t%g %g %g\n",line_vector[corner_index_2].values[3],line_vector[corner_index_2].values[4],line_vector[corner_index_2].values[5]);
-							printf("right:\t%g %g %g\n",line_vector[corner_index_1].values[3],line_vector[corner_index_1].values[4],line_vector[corner_index_1].values[5]);
-						}
-						*/
-					}
-				/////////////////Type 2 means there is a intersection but maybe not connected		
-					else{
-						printf("type2\n");
-						int indexmax=0;
-						int indexmin=0;
-						for(int i=0;i<count;i++){
-							if(line_Segments_vertex[i][1]<0)
-								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-							//	indexmax=i;
-							if(line_Segments_vertex[i][1]>0)
-								printf("left:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-
-							//	indexmin=i;
-						}
-						
-
-					}
-					
+												
 				}
-				/////////////////Type 3 means there is one way	
+				/////////////////Roadtype2:  One way
 				else if (roadtype==0){
 					segment->road_classify=0;
-					printf("type3\n");
-					int indexmax=0;
-					int indexmin=0;
-					printf("This is an one way\n"); 
-					for(int i=0;i<count;i++){
-							if(line_Segments_vertex[i][1]<0)
-								printf("right:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-							//	indexmax=i;
-							if(line_Segments_vertex[i][1]>0)
-								printf("left:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-						//printf("straght:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
-					}
-				 	 
 				 	
 				}
-				//Type 4: Death way
+				/////////////////Roadtype3: Death way
 				else if (roadtype==2){
 					segment->road_classify=2;
 					printf("This is a death way.\n");
 				}
+
+
 				kinect_segment_t *segmentlist =  (kinect_segment_t*)malloc(count*sizeof(kinect_segment_t));
 				segment->segmentlist=segmentlist;
+				
 				for(int i=0;i<count;i++){
-							printf("Test:\t%g %g %g %g\n",line_Segments_vertex[i][0],line_Segments_vertex[i][1],line_Segments_vertex[i][3],line_Segments_vertex[i][4]);
-							segment->segmentlist[i].line[0].u=line_Segments_vertex[i][0];
-							segment->segmentlist[i].line[0].v=line_Segments_vertex[i][1];
-							if((line_Segments_vertex[i][3]-line_Segments_vertex[i][0])*line_vector[i].values[3]+\
-								(line_Segments_vertex[i][4]-line_Segments_vertex[i][1])*line_vector[i].values[4]>0){
-								segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]+line_vector[i].values[3];
-								segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]+line_vector[i].values[4];
-								printf("YES\t");
-							}
-							else{
-								printf("NO\t");
-								segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]-line_vector[i].values[3];
-								segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]-line_vector[i].values[4];
-							}
-							if (roadtype==2){
-								segment->segmentlist[i].line[0].u=1.0;
-								segment->segmentlist[i].line[0].v=-1.0;
-								segment->segmentlist[i].line[1].u=1.0+1.0/sqrt(2);
-								segment->segmentlist[i].line[1].v=-1.0+1.0/sqrt(2);
-							}
-							
-							
-							
-							segment->segmentlist[i].side=0;
-							if(segment->segmentlist[i].line[0].v<0){								
-								segment->segmentlist[i].side=1;			//right:1
-								printf("right:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
-							}
-							//	indexmax=i;
-							if(segment->segmentlist[i].line[0].v>0){
-								segment->segmentlist[i].side=0;			//left:0
-								printf("left:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
-							}
-						//printf("straght:\t%g %g %g\n",line_vector[i].values[3],line_vector[i].values[4],line_vector[i].values[5]);
+					printf("Original wall direction:\t%g %g %g %g\n",line_Segments_vertex[i][0],line_Segments_vertex[i][1],line_Segments_vertex[i][3],line_Segments_vertex[i][4]);
+					segment->segmentlist[i].line[0].u=line_Segments_vertex[i][0];
+					segment->segmentlist[i].line[0].v=line_Segments_vertex[i][1];
+
+					////Recorrect wall direction
+					if((line_Segments_vertex[i][3]-line_Segments_vertex[i][0])*line_vector[i].values[3]+\
+					(line_Segments_vertex[i][4]-line_Segments_vertex[i][1])*line_vector[i].values[4]>0){
+						segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]+line_vector[i].values[3];
+						segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]+line_vector[i].values[4];
 					}
+					else{
+						segment->segmentlist[i].line[1].u=line_Segments_vertex[i][0]-line_vector[i].values[3];
+						segment->segmentlist[i].line[1].v=line_Segments_vertex[i][1]-line_vector[i].values[4];
+					}
+							//Recorrect direction if there is a deathway
+					if (roadtype==2){
+						segment->segmentlist[i].line[0].u=1.0;
+						segment->segmentlist[i].line[0].v=-1.0;
+						segment->segmentlist[i].line[1].u=1.0+1.0/sqrt(2);
+						segment->segmentlist[i].line[1].v=-1.0+1.0/sqrt(2);
+						final_right_direction[0]=1;final_right_direction[1]=1;final_right_distance=sqrt(2);
+						printf("Death way:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
+						
+					}					
+							
+					//Define the right way or left way
+					segment->segmentlist[i].side=1;
+					if (roadtype!=2){
+						if(segment->segmentlist[i].line[0].v<0){								
+							segment->segmentlist[i].side=1;			//right:1
+							printf("right wall:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
+							double reg=1.0/sqrt(pow(segment->segmentlist[i].line[0].u,2)+pow(segment->segmentlist[i].line[0].v,2));
+							final_right_distance+=reg;
+							final_right_direction[0]+=reg*(segmentlist[i].line[1].u-segmentlist[i].line[0].u);
+							final_right_direction[1]+=reg*(segmentlist[i].line[1].v-segmentlist[i].line[0].v);
+						}
+						if(segment->segmentlist[i].line[0].v>0){
+							segment->segmentlist[i].side=0;			//left:0
+							printf("left wall:\t%g %g %g %g\n",segment->segmentlist[i].line[0].u,segment->segmentlist[i].line[0].v,segmentlist[i].line[1].u-segmentlist[i].line[0].u,segmentlist[i].line[1].v-segmentlist[i].line[0].v);
+							double reg=1.0/sqrt(pow(segment->segmentlist[i].line[0].u,2)+pow(segment->segmentlist[i].line[0].v,2));
+							final_left_distance+=reg;
+							final_left_direction[0]+=reg*(segmentlist[i].line[1].u-segmentlist[i].line[0].u);
+							final_left_direction[1]+=reg*(segmentlist[i].line[1].v-segmentlist[i].line[0].v);
+						}
+					}
+					
+				}
+				//Visualize forward direction
+				if (roadtype==0){
+					if(final_right_distance<=0){
+						final_right_distance=final_left_distance;
+						final_right_direction[0]=final_left_direction[0]/final_left_distance;
+						final_right_direction[1]=final_left_direction[1]/final_left_distance;
+
+					}					
+				}
+				if (roadtype==1){
+					final_right_distance+=final_left_distance;
+					final_right_direction[0]+=final_left_direction[0]*final_left_distance;
+					final_right_direction[1]+=final_left_direction[1]*final_left_distance;
+					final_right_direction[0]=final_right_direction[0]/final_right_distance;
+					final_right_direction[1]=final_right_direction[1]/final_right_distance;
+				}
+				
 			}
-			if (count>0)
+
+
+			//Draw the depth Image
+			
+    		for(int i=0;i<cloud_raw->points.size ();i++){
+				bot_lcmgl_color3f(lcmgl_pointcloud, cloud_raw->points[i].r/255.0, cloud_raw->points[i].g/255.0, cloud_raw->points[i].b/255.0);
+    			bot_lcmgl_vertex3f(lcmgl_pointcloud, cloud_raw->points[i].x, cloud_raw->points[i].y, cloud_raw->points[i].z);	    
+		   }
+			if (count>0){
 				kinect_segmentlist_v2_t_publish(this->lcm_, "Segmentlist", this->segment);
-			gettimeofday(&stop1,NULL);
-				  duration1=(stop1.tv_sec-start1.tv_sec)+(stop1.tv_usec-start1.tv_usec)/1000000.0;
-				  printf("Time publish:\t%lf\n",duration1);
-				  gettimeofday(&start1,NULL);
+				Eigen::Vector3d start_pt_left;
+			   	Eigen::Vector3d stop_pt_left;				   
+			   	start_pt_left << 0.0,0.0,0.0;			   
+			   	stop_pt_left << final_right_direction[0],final_right_direction[1],0.0;
+			    rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left,1,0,0);
+			    rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left,1,0,0);
+			}
+			
 
-
-			//////////////////////////////////////////////////////////
+			/*
+			//Draw the found wall
 			if(doncloud1_right->points.size()>=10){
 				for(int i=0;i<doncloud1_right->points.size ();i++){
 						bot_lcmgl_color3f(lcmgl_pointcloud, 0,  1, 0);
@@ -809,36 +737,18 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		    			bot_lcmgl_vertex3f(lcmgl_pointcloud, doncloud1_right->points[i].x,doncloud1_right->points[i].y, doncloud1_right->points[i].z);	    
 			  	}			  
 			}
-
-		    /////////////////////////////////////////////	
-
-
+			*/
+	   
 		   
-		   /////////////////////////////////////////////
-			
-    		 for(int i=0;i<cloud_raw->points.size ();i++){
-				//printf("x= %f y=%f z=%f\n ",cloud_cluster_don->points[i].x,cloud_cluster_don->points[i].y,cloud_cluster_don->points[i].z);
-				bot_lcmgl_color3f(lcmgl_pointcloud, cloud_raw->points[i].r/255.0, cloud_raw->points[i].g/255.0, cloud_raw->points[i].b/255.0);
-    			bot_lcmgl_vertex3f(lcmgl_pointcloud, cloud_raw->points[i].x, cloud_raw->points[i].y, cloud_raw->points[i].z);	    
-    			//printf("%f\t%f\t%f\n",cloud_raw->points[i].x,cloud_raw->points[i].y,cloud_raw->points[i].z);
-		   }
 		   for(int i=0;i<count;i++){
-		   			Eigen::Vector3d start_pt_left;
-			   		Eigen::Vector3d stop_pt_left;
-				   
-			   		start_pt_left << line_vector[i].values[0],line_vector[i].values[1],line_vector[i].values[2];
-			   
-			   		stop_pt_left << line_vector[i].values[0]+4*line_vector[i].values[3],line_vector[i].values[1]+4*line_vector[i].values[4],line_vector[i].values[2]+4*line_vector[i].values[5];
-			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left);
-			   rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left);
+		   		Eigen::Vector3d start_pt_left;
+			   	Eigen::Vector3d stop_pt_left;				   
+			   	start_pt_left << line_vector[i].values[0],line_vector[i].values[1],line_vector[i].values[2];			   
+			   	stop_pt_left << line_vector[i].values[0]+4*line_vector[i].values[3],line_vector[i].values[1]+4*line_vector[i].values[4],line_vector[i].values[2]+4*line_vector[i].values[5];
+			    rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left,0,0,1);
+			    //rv::draw_line_lcmgl(lcmgl_pointcloud, start_pt_left, stop_pt_left);
 		   }
-		   //~cloud_raw;
-		   //~PointCloud (cloud_raw){}	;
-		   //delete cloud_raw;
-		   //pcl::PointCloud< pcl::PointXYZRGB >::~PointCloud (cloud_raw)	;
-
-
-		  	
+	  	
 			bot_lcmgl_end(lcmgl_pointcloud);
     		bot_lcmgl_switch_buffer(lcmgl_pointcloud);
     		////////////////////////////Free memory
