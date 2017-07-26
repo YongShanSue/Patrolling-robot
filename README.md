@@ -23,6 +23,7 @@ requisite: Compile assistive-robotics-repo (you can find the information in ARG 
 
 # Play the logdata
   open a terminal
+  
   laptop  $lcm-logplayer-gui $(DataName)
 # Visualize the log data
   open a terminal
