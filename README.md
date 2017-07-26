@@ -22,10 +22,14 @@ requisite: Compile assistive-robotics-repo (you can find the information in ARG 
   https://drive.google.com/drive/u/1/folders/0B3Bm1CtYcrCGRHZMY0NGMUl4MlU
 
 # Play the logdata
+  open a terminal
   laptop  $lcm-logplayer-gui $(DataName)
 # Visualize the log data
+  open a terminal
   laptop  $kinect-viewer
 # Run the code to find the groundline
-  laptop  $rv-kinect-frame-pcl-kobe-demo
+  open a terminal
+  laptop  $rv-kinect-frame-pcl-kobe-demo2
 # Visualize the outcome
+  open a terminal
   laptop  $bot-lcmgl-viewer
