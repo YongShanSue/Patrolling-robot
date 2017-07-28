@@ -290,6 +290,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  condrem1.setInputCloud (cloud_raw);
 		  condrem1.setKeepOrganized(true);
 		  condrem1.filter (*cloud_filtered);
+		  printf("points:%lf\n",cloud_filtered->points.size());
+		  pointcloudResize(cloud_filtered);
+		  printf("points:%lf\n",cloud_filtered->points.size());
+
 
 		  int reg2=(int)((minPt.z)/0.05)-1;
 		  int reg1=(int)((minPt.z+0.8)/0.05)+1;
@@ -326,6 +330,8 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  condrem1.setInputCloud (cloud_filtered);
 		  condrem1.setKeepOrganized(true);
 		  condrem1.filter (*cloud_filtered);
+		  pointcloudResize(cloud_filtered);
+
 
 		 // cloud_raw=cloud_filtered;
 		  cloud_raw_reg=cloud_filtered;
@@ -370,7 +376,11 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  // Create output cloud for DoN results
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud (new pcl::PointCloud<pcl::PointNormal>);
 		  pcl::copyPointCloud<pcl::PointXYZRGB, pcl::PointNormal>(*cloud_raw_reg, *doncloud);
-
+		  /*
+		  for(int i=0;i<doncloud->points.size();i++){
+		  
+		  	printf("%lf , %lf,%lf,%lf \n",doncloud->points[i].x,doncloud->points[i].y,doncloud->points[i].z,doncloud->points[i].curvature);
+		}*/
 
 		  // Create DoN operator
 		  pcl::DifferenceOfNormalsEstimation<pcl::PointXYZRGB, pcl::PointNormal, pcl::PointNormal> don;
@@ -379,13 +389,18 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  don.setNormalScaleSmall (normals_small_scale);				//Use the small range point cloud to calculate the normal 
 		  // Compute DoN
 		  don.computeFeature (*doncloud);								//Calculate Difference of normal
+		  //printf("point number _ before resize: %d\n",doncloud->points.size());
 		  pointcloudResize (cloud_raw_reg);
-		  pointcloudResize (doncloud);
-
+		 // pointcloudResize (doncloud);
+		  //printf("Epoint number after resize: %d\n",doncloud->points.size());
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_left=doncloud;
 		  pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_right=doncloud;
-
-
+		  /*
+for(int i=0;i<doncloud->points.size();i++){
+		  
+		  	printf("%lf , %lf,%lf,%lf \n",doncloud->points[i].x,doncloud->points[i].y,doncloud->points[i].z,doncloud->points[i].curvature);
+		}
+		*/
 		  //////////////////Calculate the histogram of "Difference of Normal"
 		double curpercent[10];
 		double curvatur_hit[10];
@@ -396,16 +411,18 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  	for(int j=0;j<10;j++){
 		  		if( doncloud->points[i].curvature <0.1*j+0.1 && doncloud->points[i].curvature>=0.1*j)
 		  			curvatur_hit[j]++;
+		  		if( doncloud->points[i].curvature >1.0)
+		  			printf("ERROR: %lf\n",doncloud->points[i].curvature);
 		  	}		  	
 		}
-		  
+		  printf("Epoint number: %d\n",doncloud->points.size());
 		for(int i=0;i<10;i++){
 		  	curpercent[i]=curvatur_hit[i]/doncloud->points.size();
 		  	printf("%lf < curvature < %lf = %lf\n",0.1*i,0.1*(i+1),curpercent[i]);
 		}
 		  
 		  
-
+		
 		  ///////////////////////Filter out the high curvature(ground line) and ground.
 
 		  // Build the condition for filtering			filter the right road
@@ -418,8 +435,10 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 		  condrem_right.setKeepOrganized(true);
 		   pcl::PointCloud<pcl::PointNormal>::Ptr doncloud_filtered_right (new pcl::PointCloud<pcl::PointNormal>);
 		  // Apply filter
+
 		  condrem_right.filter (*doncloud_filtered_right);
 		  doncloud_right = doncloud_filtered_right;
+		  
 		  pointcloudResize(doncloud_right);
 		 
  		gettimeofday(&stop1,NULL);
@@ -506,9 +525,9 @@ void blKinectFramePCL::on_frame(const kinect_frame_msg_t* msg) {
 				    pcl::copyPointCloud(*line_project_to_xy_filtered,*line_project_to_xy_reg);
 
 				    //If the nearest pointclouds of detected wall is too far , then ignore it.
-				    if ( pow(line_project_to_xy_reg->points[0].x,2)+pow(line_project_to_xy_reg->points[0].y,2)+pow(line_project_to_xy_reg->points[0].z,2)<5.0|| \
-				    	pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].x,2)+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].y,2)\
-				    	+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].z,2)<5.0){
+				    if ( sqrt(pow(line_project_to_xy_reg->points[0].x,2)+pow(line_project_to_xy_reg->points[0].y,2)+pow(line_project_to_xy_reg->points[0].z,2))<5.0|| \
+				    	sqrt(pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].x,2)+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].y,2)\
+				    	+pow(line_project_to_xy_reg->points[line_project_to_xy_reg->points.size()-1].z,2))<5.0){
 				    	line_Segments_Clouds.push_back(line_project_to_xy_reg);
 					    if(line_project_to_xy_filtered->points.size ()<regsize)
 					    	line_vector.push_back(line2);
